@@ -27,7 +27,7 @@
 - [x] **Implement ElevenLabs transcription provider**
    Upload audio, store raw provider response, and create a provider run record.
 
-- [ ] **Normalize transcript output**
+- [x] **Normalize transcript output**
     Convert provider responses into stable internal segments and local speakers.
 
 - [ ] **Render basic diarized transcript**

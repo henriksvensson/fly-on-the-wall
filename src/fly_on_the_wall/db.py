@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fly_on_the_wall.storage import ensure_storage_layout, storage_paths
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA_STATEMENTS = (
     """
@@ -63,6 +63,37 @@ SCHEMA_STATEMENTS = (
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         completed_at TEXT,
         FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS local_speakers (
+        id TEXT PRIMARY KEY,
+        meeting_id TEXT NOT NULL,
+        provider_run_id TEXT NOT NULL,
+        label TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(provider_run_id, label),
+        FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE,
+        FOREIGN KEY(provider_run_id) REFERENCES provider_runs(id) ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS segments (
+        id TEXT PRIMARY KEY,
+        meeting_id TEXT NOT NULL,
+        provider_run_id TEXT NOT NULL,
+        local_speaker_id TEXT,
+        sequence INTEGER NOT NULL,
+        start_time REAL,
+        end_time REAL,
+        text TEXT NOT NULL,
+        language TEXT,
+        source_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(provider_run_id, sequence),
+        FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE,
+        FOREIGN KEY(provider_run_id) REFERENCES provider_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY(local_speaker_id) REFERENCES local_speakers(id) ON DELETE SET NULL
     )
     """,
 )
