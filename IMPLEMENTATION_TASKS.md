@@ -54,7 +54,7 @@
 - [x] **Add OpenAI light cleanup**
     Lightly improve punctuation, casing, and phrasing using glossary/context without changing meaning.
 
-- [ ] **Implement immutable markdown export**
+- [x] **Implement immutable markdown export**
     Export cleaned named transcript and manifest without overwriting previous exports.
 
 - [ ] **Implement `fot process`**
