@@ -15,7 +15,7 @@
 - [x] **Implement `fot doctor`**
    Check Python environment, FFmpeg availability, config paths, storage paths, and required API keys.
 
-- [ ] **Implement meeting import**
+- [x] **Implement meeting import**
    Copy audio into app storage, create meeting record, generate UUID and readable slug.
 
 - [ ] **Build audio adapter**
