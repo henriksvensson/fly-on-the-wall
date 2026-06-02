@@ -6,8 +6,10 @@ import pytest
 
 from fly_on_the_wall.config import AppConfig
 from fly_on_the_wall.db import database
-from fly_on_the_wall.processing import process_audio
+from fly_on_the_wall.people import create_person
+from fly_on_the_wall.processing import process_audio, refresh_meeting
 from fly_on_the_wall.providers.openai_cleanup import OpenAICleanupError
+from fly_on_the_wall.speakers import assign_speaker_to_person
 from fly_on_the_wall.storage import StoragePaths, ensure_storage_layout
 
 
@@ -170,6 +172,7 @@ def test_process_audio_reports_progress(tmp_path: Path) -> None:
         "Importing audio",
         "Transcribing audio with ElevenLabs",
         "Normalizing transcript",
+        "Matching speaker identities",
         "Rendering named transcript",
         "Running deterministic cleanup",
         "Exporting markdown",
@@ -304,3 +307,60 @@ def test_process_audio_reuses_openai_cleanup_and_analysis_cache(
     assert "Cleaned hej" in first.export.transcript_path.read_text()
     assert "Cleaned hej" in second.export.transcript_path.read_text()
     assert "Cached analysis." in second.export.analysis_path.read_text()
+
+
+def test_refresh_meeting_reexports_without_transcription(tmp_path: Path) -> None:
+    audio_path = tmp_path / "meeting.m4a"
+    audio_path.write_bytes(b"audio")
+    storage = ensure_storage_layout(tmp_path / "storage")
+    transcribe_calls = 0
+
+    def fake_transcribe(
+        connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
+    ) -> str:
+        nonlocal transcribe_calls
+        transcribe_calls += 1
+        raw_path = storage.artifacts / meeting_id / "raw.json"
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        raw_path.write_text(
+            json.dumps(
+                {
+                    "language_code": "sv",
+                    "words": [
+                        {"speaker_id": "speaker_0", "text": "Hej", "start": 0, "end": 0.2}
+                    ],
+                }
+            )
+        )
+        connection.execute(
+            """
+            INSERT INTO provider_runs(id, meeting_id, provider, model, raw_response_path, status)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("run-1", meeting_id, "elevenlabs", "scribe_v2", str(raw_path), "done"),
+        )
+        return "run-1"
+
+    with database(tmp_path / "fly.db") as connection:
+        processed = process_audio(
+            connection,
+            audio_path,
+            "Intro Call",
+            AppConfig(cleanup_mode="deterministic"),
+            storage,
+            transcribe_fn=fake_transcribe,
+        )
+        local_speaker_id = connection.execute("SELECT id FROM local_speakers").fetchone()["id"]
+        person = create_person(connection, "Person B")
+        assign_speaker_to_person(connection, local_speaker_id, person.id)
+        refreshed = refresh_meeting(
+            connection,
+            processed.meeting.slug,
+            AppConfig(cleanup_mode="deterministic"),
+            storage,
+        )
+
+    assert transcribe_calls == 1
+    assert refreshed.provider_run_id == "run-1"
+    assert refreshed.export.transcript_path != processed.export.transcript_path
+    assert "**Person B:** Hej" in refreshed.export.transcript_path.read_text()

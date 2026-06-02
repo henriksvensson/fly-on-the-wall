@@ -32,6 +32,29 @@ def test_match_local_speakers_marks_unknown_without_embeddings(tmp_path: Path) -
     assert matches[0].person_id is None
 
 
+def test_match_local_speakers_preserves_user_corrections(tmp_path: Path) -> None:
+    with database(tmp_path / "fly.db") as connection:
+        _insert_matching_fixture(connection, tmp_path)
+        connection.execute(
+            """
+            INSERT INTO speaker_assignments(id, local_speaker_id, person_id, status, evidence_json)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                "assignment-1",
+                "local-1",
+                "person-2",
+                "known",
+                json.dumps({"method": "user_correction"}),
+            ),
+        )
+        match_local_speakers(connection, "run-1", ConfidenceThresholds(named=0.9, uncertain=0.5))
+        row = connection.execute("SELECT * FROM speaker_assignments").fetchone()
+
+    assert row["person_id"] == "person-2"
+    assert json.loads(row["evidence_json"])["method"] == "user_correction"
+
+
 def _insert_matching_fixture(connection, tmp_path: Path) -> None:
     _insert_base_local_speaker(connection)
     local_embedding = tmp_path / "local.json"

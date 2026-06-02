@@ -4,6 +4,7 @@ from sqlite3 import Connection
 
 from fly_on_the_wall.meetings import get_meeting
 from fly_on_the_wall.pipeline import STALE, set_stage_status
+from fly_on_the_wall.speaker_identity import match_provider_run_speakers
 
 SPEAKER_DEPENDENT_STAGES = ("speaker_matching", "render", "cleanup", "export")
 
@@ -31,3 +32,24 @@ def list_stale_stages(connection: Connection) -> list[dict]:
         """
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+def rerun_speaker_matching(connection: Connection, meeting_id_or_slug: str) -> int:
+    meeting = get_meeting(connection, meeting_id_or_slug)
+    if meeting is None:
+        raise ValueError(f"Meeting not found: {meeting_id_or_slug}")
+
+    provider_run = connection.execute(
+        """
+        SELECT id FROM provider_runs
+        WHERE meeting_id = ? AND status = 'done'
+        ORDER BY completed_at DESC, created_at DESC
+        LIMIT 1
+        """,
+        (meeting["id"],),
+    ).fetchone()
+    if provider_run is None:
+        raise ValueError(f"No completed provider run found for meeting: {meeting_id_or_slug}")
+
+    matches = match_provider_run_speakers(connection, provider_run["id"])
+    return len(matches)

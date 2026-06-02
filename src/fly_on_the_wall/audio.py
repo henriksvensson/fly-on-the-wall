@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import subprocess
+import sys
+import time
 from pathlib import Path
+from select import select
 
 
 class AudioError(RuntimeError):
@@ -70,6 +73,43 @@ def extract_clip(input_path: Path, output_path: Path, start: float, end: float) 
         ]
     )
     return output_path
+
+
+def play_audio(audio_path: Path, player: str = "ffplay", stop_on_enter: bool = False) -> None:
+    if player == "ffplay":
+        command = ["ffplay", "-nodisp", "-autoexit", str(audio_path)]
+    else:
+        command = [player, str(audio_path)]
+    if stop_on_enter:
+        _run_until_enter(command)
+        return
+    _run(command)
+
+
+def _run_until_enter(command: list[str]) -> None:
+    try:
+        process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except FileNotFoundError as exc:
+        raise AudioError(f"Required audio tool not found: {command[0]}") from exc
+
+    try:
+        while process.poll() is None:
+            if sys.stdin.isatty():
+                ready, _, _ = select([sys.stdin], [], [], 0.1)
+                if ready:
+                    sys.stdin.readline()
+                    process.terminate()
+                    break
+            else:
+                time.sleep(0.1)
+    except KeyboardInterrupt:
+        process.terminate()
+    finally:
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
 
 
 def _run(command: list[str]) -> subprocess.CompletedProcess[str]:

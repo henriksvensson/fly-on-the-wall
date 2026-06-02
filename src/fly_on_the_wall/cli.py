@@ -8,9 +8,11 @@ from rich.console import Console
 from rich.table import Table
 
 from fly_on_the_wall import __version__
+from fly_on_the_wall.audio import AudioError, play_audio
 from fly_on_the_wall.config import load_config
 from fly_on_the_wall.db import database
 from fly_on_the_wall.doctor import has_failures, run_checks
+from fly_on_the_wall.embeddings import EmbeddingBackend, PyannoteEmbeddingBackend
 from fly_on_the_wall.meetings import (
     delete_meeting,
     get_meeting,
@@ -18,9 +20,13 @@ from fly_on_the_wall.meetings import (
     list_meetings,
     meeting_stage_status,
 )
-from fly_on_the_wall.people import create_person, get_person, list_people
-from fly_on_the_wall.processing import process_audio
-from fly_on_the_wall.reanalysis import list_stale_stages, mark_speaker_reanalysis_stale
+from fly_on_the_wall.people import Person, create_person, get_person, list_people
+from fly_on_the_wall.processing import process_audio, refresh_meeting
+from fly_on_the_wall.reanalysis import (
+    list_stale_stages,
+    mark_speaker_reanalysis_stale,
+    rerun_speaker_matching,
+)
 from fly_on_the_wall.secrets import (
     SecretError,
     get_api_key_status,
@@ -28,12 +34,18 @@ from fly_on_the_wall.secrets import (
     remove_api_key,
     set_api_key,
 )
+from fly_on_the_wall.speaker_identity import (
+    create_voice_identity_from_speaker,
+    mark_unknown,
+    prepare_speaker_review_clip,
+)
 from fly_on_the_wall.speakers import (
     assign_speaker_to_person,
     create_person_from_speaker,
     list_unknown_speakers,
     speaker_examples,
 )
+from fly_on_the_wall.voice_samples import list_voice_samples
 
 app = typer.Typer(
     name="fot",
@@ -250,32 +262,115 @@ def speakers_review(
     ] = None,
 ) -> None:
     """Interactively review unknown speakers."""
+    backend: EmbeddingBackend | None = None
+    changed_meetings: set[str] = set()
     with database() as connection:
         speakers = list_unknown_speakers(connection, meeting)
-        examples_by_speaker = {
-            speaker["id"]: speaker_examples(connection, speaker["id"], limit=1)
-            for speaker in speakers
-        }
 
-    if not speakers:
-        console.print("No unknown speakers found.")
-        return
+        if not speakers:
+            console.print("No unknown speakers found.")
+            return
 
-    for speaker in speakers:
-        console.print(f"Unknown speaker: {speaker['id']}")
-        console.print(f"Meeting: {speaker['meeting_slug']}")
-        console.print(f"Label: {speaker['label']}")
-        examples = examples_by_speaker[speaker["id"]]
-        if examples:
-            console.print(f"Example: {examples[0]['text']}")
+        for speaker in speakers:
+            console.print(f"Unknown speaker: {speaker['id']}")
+            console.print(f"Meeting: {speaker['meeting_slug']}")
+            console.print(f"Label: {speaker['label']}")
+            examples = speaker_examples(connection, speaker["id"], limit=1)
+            if examples:
+                console.print(f"Example: {examples[0]['text']}")
 
-        action = typer.prompt("Action [s=skip, u=keep unknown, p=play placeholder]", default="s")
-        if action == "p":
-            console.print("Audio playback will be available after clip extraction is wired in.")
-        elif action == "u":
-            console.print("Kept as unknown.")
-        else:
-            console.print("Skipped.")
+            try:
+                clip_path = prepare_speaker_review_clip(connection, speaker["id"])
+            except AudioError as exc:
+                clip_path = None
+                console.print(f"Could not extract review clip: {exc}")
+
+            if clip_path is not None:
+                console.print(f"Clip: {clip_path}")
+
+            while True:
+                action = typer.prompt(
+                    "Action [p=play, a=assign+sample, n=name only, "
+                    "c=create person, u=unknown, s=skip]",
+                    default="p" if clip_path is not None else "s",
+                ).strip().lower()
+                if action == "p" and clip_path is not None:
+                    try:
+                        console.print("Playing. Press Enter to stop.")
+                        play_audio(clip_path, stop_on_enter=True)
+                    except AudioError as exc:
+                        console.print(f"Could not play clip: {exc}")
+                    continue
+                if action == "a":
+                    person = _select_person(connection)
+                    if person is None:
+                        console.print("Assignment cancelled.")
+                        continue
+                    backend = backend or _try_embedding_backend()
+                    try:
+                        result = create_voice_identity_from_speaker(
+                            connection, speaker["id"], person.id, storage=None, backend=backend
+                        )
+                    except ValueError as exc:
+                        console.print(str(exc))
+                        continue
+                    console.print(f"Assigned speaker to {result.person_name}")
+                    console.print(f"Voice sample: {result.voice_sample.audio_path}")
+                    changed_meetings.add(speaker["meeting_slug"])
+                    break
+                if action == "n":
+                    person = _select_person(connection)
+                    if person is None:
+                        console.print("Assignment cancelled.")
+                        continue
+                    assignment = assign_speaker_to_person(connection, speaker["id"], person.id)
+                    console.print(f"Assigned speaker to {assignment['name']} without voice sample.")
+                    changed_meetings.add(speaker["meeting_slug"])
+                    break
+                if action == "c":
+                    name = typer.prompt("New person name")
+                    backend = backend or _try_embedding_backend()
+                    try:
+                        result = create_voice_identity_from_speaker(
+                            connection,
+                            speaker["id"],
+                            name,
+                            create_missing_person=True,
+                            storage=None,
+                            backend=backend,
+                        )
+                    except ValueError as exc:
+                        console.print(str(exc))
+                        continue
+                    console.print(f"Created {result.person_name}")
+                    console.print(f"Voice sample: {result.voice_sample.audio_path}")
+                    changed_meetings.add(speaker["meeting_slug"])
+                    break
+                if action == "u":
+                    mark_unknown(connection, speaker["id"])
+                    console.print("Kept as unknown.")
+                    changed_meetings.add(speaker["meeting_slug"])
+                    break
+                if action == "s":
+                    console.print("Skipped.")
+                    break
+                console.print("Unknown action.")
+
+        if changed_meetings and typer.confirm(
+            "Refresh exports for affected meetings now?", default=True
+        ):
+            config = load_config()
+            for meeting_slug in sorted(changed_meetings):
+                result = refresh_meeting(
+                    connection,
+                    meeting_slug,
+                    config,
+                    embedding_backend=backend,
+                    progress=lambda message: console.print(f"-> {message}"),
+                )
+                console.print(f"Refreshed {result.meeting.slug}")
+                console.print(f"Transcript: {result.export.transcript_path}")
+                console.print(f"Analysis: {result.export.analysis_path}")
 
 
 @speakers_app.command("assign")
@@ -298,9 +393,15 @@ def speakers_create_person(local_speaker_id: str, name: str) -> None:
 
 @reanalyze_app.command("speakers")
 def reanalyze_speakers(meeting: str) -> None:
-    """Mark speaker-dependent stages stale for one meeting."""
+    """Rerun speaker matching and mark downstream speaker stages stale."""
     with database() as connection:
+        try:
+            match_count = rerun_speaker_matching(connection, meeting)
+        except RuntimeError as exc:
+            console.print(f"Speaker matching skipped: {exc}")
+            match_count = 0
         stages = mark_speaker_reanalysis_stale(connection, meeting)
+    console.print(f"Matched speakers: {match_count}")
     console.print(f"Marked stale: {', '.join(stages)}")
 
 
@@ -359,6 +460,67 @@ def people_show(person: str) -> None:
 
     console.print(f"Name: {found.display_name}")
     console.print(f"ID: {found.id}")
+
+
+@people_app.command("voice-samples")
+def people_voice_samples(person: str) -> None:
+    """List confirmed voice samples for one person."""
+    with database() as connection:
+        found = get_person(connection, person)
+        if found is None:
+            console.print(f"Person not found: {person}")
+            raise typer.Exit(code=1)
+        samples = list_voice_samples(connection, found.id)
+
+    if not samples:
+        console.print("No voice samples found.")
+        return
+
+    table = Table(title=f"Voice Samples: {found.display_name}")
+    table.add_column("ID")
+    table.add_column("Audio")
+    table.add_column("Start")
+    table.add_column("End")
+    for sample in samples:
+        table.add_row(
+            sample.id,
+            str(sample.audio_path),
+            "" if sample.start_time is None else f"{sample.start_time:.2f}",
+            "" if sample.end_time is None else f"{sample.end_time:.2f}",
+        )
+    console.print(table)
+
+
+def _try_embedding_backend() -> EmbeddingBackend | None:
+    try:
+        return PyannoteEmbeddingBackend()
+    except RuntimeError as exc:
+        console.print(f"Voice sample saved without embedding ({exc})")
+        return None
+
+
+def _select_person(connection) -> Person | None:
+    people = list_people(connection)
+    if not people:
+        console.print("No people found. Use create person instead.")
+        return None
+
+    table = Table(title="Select Person")
+    table.add_column("#")
+    table.add_column("Name")
+    for index, person in enumerate(people, start=1):
+        table.add_row(str(index), person.display_name)
+    console.print(table)
+
+    while True:
+        choice = typer.prompt("Person number [s=cancel]", default="s").strip().lower()
+        if choice == "s":
+            return None
+        if choice.isdigit():
+            index = int(choice)
+            if 1 <= index <= len(people):
+                return people[index - 1]
+        console.print("Choose a listed number or s to cancel.")
 
 
 @secrets_app.command("status")

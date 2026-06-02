@@ -99,6 +99,18 @@ def _score_people(
 
 
 def _store_assignment(connection: Connection, match: SpeakerMatch) -> None:
+    existing = connection.execute(
+        "SELECT evidence_json FROM speaker_assignments WHERE local_speaker_id = ?",
+        (match.local_speaker_id,),
+    ).fetchone()
+    if existing is not None:
+        try:
+            evidence = json.loads(existing["evidence_json"])
+        except json.JSONDecodeError:
+            evidence = {}
+        if evidence.get("method") == "user_correction":
+            return
+
     with connection:
         connection.execute(
             """

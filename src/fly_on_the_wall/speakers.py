@@ -97,6 +97,31 @@ def create_person_from_speaker(connection: Connection, local_speaker_id: str, na
     return assign_speaker_to_person(connection, local_speaker_id, person.id)
 
 
+def mark_speaker_unknown(connection: Connection, local_speaker_id: str) -> None:
+    meeting_id = _local_speaker_meeting_id(connection, local_speaker_id)
+    if meeting_id is None:
+        raise ValueError(f"Local speaker not found: {local_speaker_id}")
+
+    with connection:
+        connection.execute(
+            """
+            INSERT INTO speaker_assignments(id, local_speaker_id, person_id, status, evidence_json)
+            VALUES (?, ?, NULL, ?, ?)
+            ON CONFLICT(local_speaker_id) DO UPDATE SET
+                person_id = NULL,
+                status = excluded.status,
+                evidence_json = excluded.evidence_json
+            """,
+            (
+                str(uuid4()),
+                local_speaker_id,
+                "unknown",
+                json.dumps({"method": "user_correction"}),
+            ),
+        )
+        _record_correction(connection, "speaker_assignment", meeting_id, local_speaker_id, None)
+
+
 def _local_speaker_meeting_id(connection: Connection, local_speaker_id: str) -> str | None:
     row = connection.execute(
         "SELECT meeting_id FROM local_speakers WHERE id = ?", (local_speaker_id,)
@@ -109,7 +134,7 @@ def _record_correction(
     correction_type: str,
     meeting_id: str,
     local_speaker_id: str,
-    person_id: str,
+    person_id: str | None,
 ) -> None:
     connection.execute(
         """
