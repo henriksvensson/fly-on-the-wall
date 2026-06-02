@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 import shutil
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ class Meeting:
     title: str
     language: str
     imported_audio_path: Path
+    audio_sha256: str | None = None
 
 
 def import_meeting(
@@ -30,6 +32,11 @@ def import_meeting(
 ) -> Meeting:
     if not audio_path.is_file():
         raise FileNotFoundError(f"Audio file does not exist: {audio_path}")
+
+    audio_sha256 = file_sha256(audio_path)
+    existing = get_meeting_by_audio_sha256(connection, audio_sha256)
+    if existing is not None:
+        return _meeting_from_row(existing)
 
     paths = storage or ensure_storage_layout()
     meeting_id = str(uuid4())
@@ -48,8 +55,9 @@ def import_meeting(
                 description,
                 language,
                 original_audio_path,
-                imported_audio_path
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                imported_audio_path,
+                audio_sha256
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 meeting_id,
@@ -59,6 +67,7 @@ def import_meeting(
                 config.language,
                 str(audio_path),
                 str(imported_audio_path),
+                audio_sha256,
             ),
         )
 
@@ -68,7 +77,16 @@ def import_meeting(
         title=title,
         language=config.language,
         imported_audio_path=imported_audio_path,
+        audio_sha256=audio_sha256,
     )
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def slugify(value: str) -> str:
@@ -108,6 +126,39 @@ def get_meeting(connection: Connection, meeting_id_or_slug: str) -> dict | None:
         (meeting_id_or_slug, meeting_id_or_slug),
     ).fetchone()
     return None if row is None else dict(row)
+
+
+def get_meeting_by_audio_sha256(connection: Connection, audio_sha256: str) -> dict | None:
+    row = connection.execute(
+        "SELECT * FROM meetings WHERE audio_sha256 = ?", (audio_sha256,)
+    ).fetchone()
+    return None if row is None else dict(row)
+
+
+def latest_completed_provider_run(
+    connection: Connection, meeting_id: str, provider: str = "elevenlabs"
+) -> dict | None:
+    row = connection.execute(
+        """
+        SELECT * FROM provider_runs
+        WHERE meeting_id = ? AND provider = ? AND status = 'done'
+        ORDER BY completed_at DESC, created_at DESC
+        LIMIT 1
+        """,
+        (meeting_id, provider),
+    ).fetchone()
+    return None if row is None else dict(row)
+
+
+def _meeting_from_row(row: dict) -> Meeting:
+    return Meeting(
+        id=row["id"],
+        slug=row["slug"],
+        title=row["title"],
+        language=row["language"],
+        imported_audio_path=Path(row["imported_audio_path"]),
+        audio_sha256=row.get("audio_sha256"),
+    )
 
 
 def meeting_stage_status(connection: Connection, meeting_id_or_slug: str) -> list[dict]:

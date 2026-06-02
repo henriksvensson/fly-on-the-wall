@@ -36,6 +36,19 @@ def test_bootstrap_database_records_schema_version(tmp_path: Path) -> None:
     assert row["version"] == SCHEMA_VERSION
 
 
+def test_bootstrap_database_adds_audio_hash_column(tmp_path: Path) -> None:
+    database_path = tmp_path / "fly.db"
+
+    bootstrap_database(database_path)
+
+    with database(database_path) as connection:
+        columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(meetings)").fetchall()
+        }
+
+    assert "audio_sha256" in columns
+
+
 def test_database_context_enables_foreign_keys(tmp_path: Path) -> None:
     with database(tmp_path / "fly.db") as connection:
         row = connection.execute("PRAGMA foreign_keys").fetchone()

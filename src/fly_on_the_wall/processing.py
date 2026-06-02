@@ -9,7 +9,7 @@ from fly_on_the_wall.cleanup import deterministic_cleanup
 from fly_on_the_wall.config import AppConfig
 from fly_on_the_wall.exporting import ExportResult, export_markdown_transcript
 from fly_on_the_wall.glossary import load_glossary_terms
-from fly_on_the_wall.meetings import Meeting, import_meeting
+from fly_on_the_wall.meetings import Meeting, import_meeting, latest_completed_provider_run
 from fly_on_the_wall.normalization import normalize_provider_run
 from fly_on_the_wall.providers.elevenlabs import run_transcription
 from fly_on_the_wall.providers.openai_cleanup import cleanup_transcript
@@ -38,10 +38,14 @@ def process_audio(
 ) -> ProcessResult:
     paths = storage or ensure_storage_layout()
     meeting = import_meeting(connection, audio_path, title, config, paths, description)
-    resolved_transcribe = transcribe_fn or _run_elevenlabs_transcription
-    provider_run_id = resolved_transcribe(
-        connection, meeting.id, meeting.imported_audio_path, paths
-    )
+    existing_provider_run = latest_completed_provider_run(connection, meeting.id)
+    if existing_provider_run is None:
+        resolved_transcribe = transcribe_fn or _run_elevenlabs_transcription
+        provider_run_id = resolved_transcribe(
+            connection, meeting.id, meeting.imported_audio_path, paths
+        )
+    else:
+        provider_run_id = existing_provider_run["id"]
     normalize_provider_run(connection, provider_run_id)
     named_transcript = render_named_transcript(connection, provider_run_id, storage=paths)
     cleaned_transcript = deterministic_cleanup(named_transcript)

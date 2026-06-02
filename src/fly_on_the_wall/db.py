@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fly_on_the_wall.storage import ensure_storage_layout, storage_paths
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 SCHEMA_STATEMENTS = (
     """
@@ -25,9 +25,15 @@ SCHEMA_STATEMENTS = (
         language TEXT NOT NULL,
         original_audio_path TEXT,
         imported_audio_path TEXT,
+        audio_sha256 TEXT UNIQUE,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
+    """,
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_meetings_audio_sha256
+    ON meetings(audio_sha256)
+    WHERE audio_sha256 IS NOT NULL
     """,
     """
     CREATE TABLE IF NOT EXISTS people (
@@ -186,10 +192,28 @@ def initialize_database(connection: sqlite3.Connection) -> None:
     with connection:
         for statement in SCHEMA_STATEMENTS:
             connection.execute(statement)
+        _ensure_column(connection, "meetings", "audio_sha256", "TEXT")
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_meetings_audio_sha256
+            ON meetings(audio_sha256)
+            WHERE audio_sha256 IS NOT NULL
+            """
+        )
         connection.execute(
             "INSERT OR IGNORE INTO schema_migrations(version) VALUES (?)",
             (SCHEMA_VERSION,),
         )
+
+
+def _ensure_column(
+    connection: sqlite3.Connection, table_name: str, column_name: str, definition: str
+) -> None:
+    columns = {
+        row["name"] for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+    if column_name not in columns:
+        connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
 
 
 def bootstrap_database(database_path: Path | None = None) -> Path:
