@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fly_on_the_wall.storage import ensure_storage_layout, storage_paths
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 SCHEMA_STATEMENTS = (
     """
@@ -151,6 +151,20 @@ SCHEMA_STATEMENTS = (
         manifest_path TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS corrections (
+        id TEXT PRIMARY KEY,
+        correction_type TEXT NOT NULL,
+        meeting_id TEXT,
+        local_speaker_id TEXT,
+        person_id TEXT,
+        details_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE SET NULL,
+        FOREIGN KEY(local_speaker_id) REFERENCES local_speakers(id) ON DELETE SET NULL,
+        FOREIGN KEY(person_id) REFERENCES people(id) ON DELETE SET NULL
     )
     """,
 )

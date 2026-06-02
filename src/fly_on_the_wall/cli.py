@@ -19,7 +19,12 @@ from fly_on_the_wall.meetings import (
 )
 from fly_on_the_wall.people import create_person, get_person, list_people
 from fly_on_the_wall.processing import process_audio
-from fly_on_the_wall.speakers import list_unknown_speakers, speaker_examples
+from fly_on_the_wall.speakers import (
+    assign_speaker_to_person,
+    create_person_from_speaker,
+    list_unknown_speakers,
+    speaker_examples,
+)
 
 app = typer.Typer(
     name="fot",
@@ -220,6 +225,22 @@ def speakers_review(
             console.print("Kept as unknown.")
         else:
             console.print("Skipped.")
+
+
+@speakers_app.command("assign")
+def speakers_assign(local_speaker_id: str, person: str) -> None:
+    """Assign a local speaker to an existing person."""
+    with database() as connection:
+        assignment = assign_speaker_to_person(connection, local_speaker_id, person)
+    console.print(f"Assigned {assignment['local_speaker_id']} to {assignment['name']}")
+
+
+@speakers_app.command("create-person")
+def speakers_create_person(local_speaker_id: str, name: str) -> None:
+    """Create a person from a local speaker and assign it."""
+    with database() as connection:
+        assignment = create_person_from_speaker(connection, local_speaker_id, name)
+    console.print(f"Created and assigned {assignment['name']}")
 
 
 @people_app.command("create")

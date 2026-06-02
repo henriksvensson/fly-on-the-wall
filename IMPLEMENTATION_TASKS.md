@@ -69,7 +69,7 @@
 - [x] **Add interactive speaker review**
     Show unknown speaker examples, optionally play clips, and support skip/assign/create-person actions.
 
-- [ ] **Add speaker assignment commands**
+- [x] **Add speaker assignment commands**
     Implement `speakers assign` and `speakers create-person` with correction history.
 
 - [ ] **Add reanalysis commands**
