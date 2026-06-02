@@ -1,0 +1,23 @@
+{
+  "language_code": "sv",
+  "words": [
+    {
+      "speaker_id": "speaker_0",
+      "text": "Hej",
+      "start": 0.0,
+      "end": 0.2
+    },
+    {
+      "speaker_id": "speaker_0",
+      "text": " där",
+      "start": 0.2,
+      "end": 0.5
+    },
+    {
+      "speaker_id": "speaker_1",
+      "text": "Hallå",
+      "start": 1.0,
+      "end": 1.3
+    }
+  ]
+}

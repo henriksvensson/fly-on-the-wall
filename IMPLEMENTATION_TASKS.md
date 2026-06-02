@@ -78,7 +78,7 @@
 - [x] **Add glossary support**
     Load global glossary and pass known names/domain terms into cleanup.
 
-- [ ] **Add golden fixture tests**
+- [x] **Add golden fixture tests**
     Test provider normalization, rendering, cleanup, exports, and pipeline state transitions without live APIs.
 
 - [ ] **Polish CLI output**
