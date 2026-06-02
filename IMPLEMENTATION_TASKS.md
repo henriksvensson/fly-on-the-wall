@@ -12,7 +12,7 @@
 - [x] **Add SQLite foundation**
    Create database connection, migrations/bootstrap, and initial tables for meetings, people, stages, and provider runs.
 
-- [ ] **Implement `fot doctor`**
+- [x] **Implement `fot doctor`**
    Check Python environment, FFmpeg availability, config paths, storage paths, and required API keys.
 
 - [ ] **Implement meeting import**

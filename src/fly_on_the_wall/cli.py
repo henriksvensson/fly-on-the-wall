@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import typer
 from rich.console import Console
+from rich.table import Table
 
 from fly_on_the_wall import __version__
+from fly_on_the_wall.doctor import has_failures, run_checks
 
 app = typer.Typer(
     name="fot",
@@ -36,3 +38,20 @@ def main(
 def hello() -> None:
     """Verify that the CLI is installed and runnable."""
     console.print("Fly on the Wall CLI is ready.")
+
+
+@app.command()
+def doctor() -> None:
+    """Check local runtime configuration and dependencies."""
+    checks = run_checks()
+    table = Table(title="Fly on the Wall Doctor")
+    table.add_column("Check")
+    table.add_column("Status")
+    table.add_column("Detail")
+
+    for check in checks:
+        table.add_row(check.name, "ok" if check.ok else "missing", check.detail)
+
+    console.print(table)
+    if has_failures(checks):
+        raise typer.Exit(code=1)
