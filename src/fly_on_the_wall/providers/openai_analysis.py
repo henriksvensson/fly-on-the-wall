@@ -5,7 +5,7 @@ import httpx
 from fly_on_the_wall.providers.openai_cleanup import API_URL
 from fly_on_the_wall.secrets import get_api_key
 
-DEFAULT_ANALYSIS_MODEL = "gpt-5.4"
+DEFAULT_ANALYSIS_MODEL = "gpt-5.4-mini"
 
 
 class OpenAIAnalysisError(RuntimeError):
