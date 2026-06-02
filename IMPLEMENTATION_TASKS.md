@@ -36,7 +36,7 @@
 - [x] **Add people commands**
     Implement `people list`, `people create`, and `people show`.
 
-- [ ] **Model voice samples**
+- [x] **Model voice samples**
     Store confirmed voice samples, source spans, extracted clips, and embedding metadata.
 
 - [ ] **Implement local speaker embeddings**

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fly_on_the_wall.storage import ensure_storage_layout, storage_paths
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA_STATEMENTS = (
     """
@@ -94,6 +94,25 @@ SCHEMA_STATEMENTS = (
         FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE,
         FOREIGN KEY(provider_run_id) REFERENCES provider_runs(id) ON DELETE CASCADE,
         FOREIGN KEY(local_speaker_id) REFERENCES local_speakers(id) ON DELETE SET NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS voice_samples (
+        id TEXT PRIMARY KEY,
+        person_id TEXT NOT NULL,
+        source_meeting_id TEXT,
+        source_local_speaker_id TEXT,
+        start_time REAL,
+        end_time REAL,
+        audio_path TEXT NOT NULL,
+        embedding_model TEXT,
+        embedding_path TEXT,
+        quality_score REAL,
+        confirmed_by_user INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(person_id) REFERENCES people(id) ON DELETE CASCADE,
+        FOREIGN KEY(source_meeting_id) REFERENCES meetings(id) ON DELETE SET NULL,
+        FOREIGN KEY(source_local_speaker_id) REFERENCES local_speakers(id) ON DELETE SET NULL
     )
     """,
 )
