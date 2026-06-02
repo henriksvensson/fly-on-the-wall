@@ -18,7 +18,7 @@
 - [x] **Implement meeting import**
    Copy audio into app storage, create meeting record, generate UUID and readable slug.
 
-- [ ] **Build audio adapter**
+- [x] **Build audio adapter**
    Wrap FFmpeg operations for duration checks, conversion, normalization, and clip extraction.
 
 - [ ] **Add pipeline stage runner**
