@@ -113,3 +113,55 @@ def test_process_audio_reuses_existing_meeting_and_provider_run(tmp_path: Path) 
     assert second.provider_run_id == "run-1"
     assert calls == 1
     assert meeting_count == 1
+
+
+def test_process_audio_reports_progress(tmp_path: Path) -> None:
+    audio_path = tmp_path / "meeting.m4a"
+    audio_path.write_bytes(b"audio")
+    storage = ensure_storage_layout(tmp_path / "storage")
+    progress_messages: list[str] = []
+
+    def fake_transcribe(
+        connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
+    ) -> str:
+        raw_path = storage.artifacts / meeting_id / "raw.json"
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        raw_path.write_text(
+            json.dumps(
+                {
+                    "language_code": "sv",
+                    "words": [
+                        {"speaker_id": "speaker_0", "text": "Hej", "start": 0, "end": 0.2}
+                    ],
+                }
+            )
+        )
+        connection.execute(
+            """
+            INSERT INTO provider_runs(id, meeting_id, provider, model, raw_response_path, status)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("run-1", meeting_id, "elevenlabs", "scribe_v2", str(raw_path), "done"),
+        )
+        return "run-1"
+
+    with database(tmp_path / "fly.db") as connection:
+        process_audio(
+            connection,
+            audio_path,
+            "Intro Call",
+            AppConfig(cleanup_mode="deterministic"),
+            storage,
+            transcribe_fn=fake_transcribe,
+            progress=progress_messages.append,
+        )
+
+    assert progress_messages == [
+        "Importing audio",
+        "Transcribing audio with ElevenLabs",
+        "Normalizing transcript",
+        "Rendering named transcript",
+        "Running deterministic cleanup",
+        "Exporting markdown",
+        "Done",
+    ]

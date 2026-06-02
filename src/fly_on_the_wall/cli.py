@@ -125,7 +125,14 @@ def process(
     """Process audio from import through markdown export."""
     config = load_config()
     with database() as connection:
-        result = process_audio(connection, audio_path, title, config, description=description)
+        result = process_audio(
+            connection,
+            audio_path,
+            title,
+            config,
+            description=description,
+            progress=lambda message: console.print(f"-> {message}"),
+        )
 
     console.print(f"Processed meeting {result.meeting.slug}")
     console.print(f"Export: {result.export.transcript_path}")
