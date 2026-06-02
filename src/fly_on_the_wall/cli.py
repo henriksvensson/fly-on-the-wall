@@ -101,6 +101,7 @@ def import_audio(
     console.print(f"Imported meeting {meeting.slug}")
     console.print(f"ID: {meeting.id}")
     console.print(f"Audio: {meeting.imported_audio_path}")
+    console.print(f"Next: fot process {audio_path} --title \"{title}\"")
 
 
 @app.command()
@@ -118,6 +119,7 @@ def process(
 
     console.print(f"Processed meeting {result.meeting.slug}")
     console.print(f"Export: {result.export.transcript_path}")
+    console.print(f"Review unknown speakers: fot speakers unknown --meeting {result.meeting.slug}")
 
 
 @meetings_app.command("list")
@@ -126,7 +128,7 @@ def meetings_list() -> None:
     with database() as connection:
         meetings = list_meetings(connection)
     if not meetings:
-        console.print("No meetings found.")
+        console.print("No meetings found. Import one with: fot import <audio> --title \"Title\"")
         return
     table = Table(title="Meetings")
     table.add_column("Slug")
@@ -236,6 +238,7 @@ def speakers_assign(local_speaker_id: str, person: str) -> None:
     with database() as connection:
         assignment = assign_speaker_to_person(connection, local_speaker_id, person)
     console.print(f"Assigned {assignment['local_speaker_id']} to {assignment['name']}")
+    console.print("Next: fot reanalyze speakers <meeting>")
 
 
 @speakers_app.command("create-person")
@@ -244,6 +247,7 @@ def speakers_create_person(local_speaker_id: str, name: str) -> None:
     with database() as connection:
         assignment = create_person_from_speaker(connection, local_speaker_id, name)
     console.print(f"Created and assigned {assignment['name']}")
+    console.print("Next: fot reanalyze speakers <meeting>")
 
 
 @reanalyze_app.command("speakers")
@@ -286,7 +290,7 @@ def people_list() -> None:
         people = list_people(connection)
 
     if not people:
-        console.print("No people found.")
+        console.print("No people found. Create one with: fot people create \"Name\"")
         return
 
     table = Table(title="People")

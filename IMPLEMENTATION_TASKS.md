@@ -81,5 +81,5 @@
 - [x] **Add golden fixture tests**
     Test provider normalization, rendering, cleanup, exports, and pipeline state transitions without live APIs.
 
-- [ ] **Polish CLI output**
+- [x] **Polish CLI output**
     Improve progress messages, errors, and next-step hints for normal daily use.
