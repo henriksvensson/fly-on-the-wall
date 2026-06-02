@@ -57,7 +57,7 @@
 - [x] **Implement immutable markdown export**
     Export cleaned named transcript and manifest without overwriting previous exports.
 
-- [ ] **Implement `fot process`**
+- [x] **Implement `fot process`**
     Run import through export as one convenience command using the same stage runner.
 
 - [ ] **Add meeting commands**

@@ -13,6 +13,7 @@ from fly_on_the_wall.db import database
 from fly_on_the_wall.doctor import has_failures, run_checks
 from fly_on_the_wall.meetings import import_meeting
 from fly_on_the_wall.people import create_person, get_person, list_people
+from fly_on_the_wall.processing import process_audio
 
 app = typer.Typer(
     name="fot",
@@ -82,6 +83,23 @@ def import_audio(
     console.print(f"Imported meeting {meeting.slug}")
     console.print(f"ID: {meeting.id}")
     console.print(f"Audio: {meeting.imported_audio_path}")
+
+
+@app.command()
+def process(
+    audio_path: Annotated[Path, typer.Argument(exists=True, file_okay=True, dir_okay=False)],
+    title: Annotated[str, typer.Option("--title", "-t", help="Meeting title.")],
+    description: Annotated[
+        str | None, typer.Option("--description", "-d", help="Meeting context.")
+    ] = None,
+) -> None:
+    """Process audio from import through markdown export."""
+    config = load_config()
+    with database() as connection:
+        result = process_audio(connection, audio_path, title, config, description=description)
+
+    console.print(f"Processed meeting {result.meeting.slug}")
+    console.print(f"Export: {result.export.transcript_path}")
 
 
 @people_app.command("create")
