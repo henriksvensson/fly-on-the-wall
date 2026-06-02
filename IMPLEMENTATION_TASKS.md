@@ -45,7 +45,7 @@
 - [x] **Implement speaker matching**
     Compare local speakers against multiple voice samples per person and store confidence evidence.
 
-- [ ] **Render named transcript**
+- [x] **Render named transcript**
     Replace local speaker labels with `Name`, `Name?`, or `Unknown` while preserving source labels.
 
 - [ ] **Add deterministic cleanup**

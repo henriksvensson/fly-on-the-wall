@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from fly_on_the_wall.db import database
-from fly_on_the_wall.rendering import render_diarized_transcript
+from fly_on_the_wall.rendering import render_diarized_transcript, render_named_transcript
 from fly_on_the_wall.storage import ensure_storage_layout
 
 
@@ -25,6 +25,25 @@ def test_render_diarized_transcript_uses_default_artifact_path(tmp_path: Path) -
 
     output_path = storage.artifacts / "meeting-1" / "diarized-transcript.txt"
     assert output_path.read_text() == transcript + "\n"
+
+
+def test_render_named_transcript_uses_assignments(tmp_path: Path) -> None:
+    with database(tmp_path / "fly.db") as connection:
+        _insert_normalized_fixture(connection)
+        connection.execute(
+            "INSERT INTO people(id, display_name) VALUES (?, ?)", ("person-1", "Person B")
+        )
+        connection.execute(
+            """
+            INSERT INTO speaker_assignments(
+                id, local_speaker_id, person_id, status, confidence, margin
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("assignment-1", "speaker-id-0", "person-1", "known", 0.9, 0.2),
+        )
+        transcript = render_named_transcript(connection, "run-1")
+
+    assert transcript == "Person B [sv] (speaker_0): Hej\n\nUnknown [sv] (speaker_1): Hallå"
 
 
 def _insert_normalized_fixture(connection) -> None:
