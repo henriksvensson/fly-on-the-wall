@@ -42,7 +42,7 @@
 - [x] **Implement local speaker embeddings**
     Extract representative clips and cache embeddings for local speakers and voice samples.
 
-- [ ] **Implement speaker matching**
+- [x] **Implement speaker matching**
     Compare local speakers against multiple voice samples per person and store confidence evidence.
 
 - [ ] **Render named transcript**

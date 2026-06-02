@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fly_on_the_wall.storage import ensure_storage_layout, storage_paths
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA_STATEMENTS = (
     """
@@ -125,6 +125,21 @@ SCHEMA_STATEMENTS = (
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(local_speaker_id, embedding_model),
         FOREIGN KEY(local_speaker_id) REFERENCES local_speakers(id) ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS speaker_assignments (
+        id TEXT PRIMARY KEY,
+        local_speaker_id TEXT NOT NULL,
+        person_id TEXT,
+        status TEXT NOT NULL,
+        confidence REAL,
+        margin REAL,
+        evidence_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(local_speaker_id),
+        FOREIGN KEY(local_speaker_id) REFERENCES local_speakers(id) ON DELETE CASCADE,
+        FOREIGN KEY(person_id) REFERENCES people(id) ON DELETE SET NULL
     )
     """,
 )
