@@ -51,7 +51,7 @@
 - [x] **Add deterministic cleanup**
     Merge adjacent same-speaker utterances, normalize whitespace, and remove empty fragments.
 
-- [ ] **Add OpenAI light cleanup**
+- [x] **Add OpenAI light cleanup**
     Lightly improve punctuation, casing, and phrasing using glossary/context without changing meaning.
 
 - [ ] **Implement immutable markdown export**
