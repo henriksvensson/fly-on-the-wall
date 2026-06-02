@@ -17,3 +17,10 @@ def test_cli_version() -> None:
 
     assert result.exit_code == 0
     assert "fly-on-the-wall 0.1.0" in result.stdout
+
+
+def test_people_group_exists() -> None:
+    result = runner.invoke(app, ["people", "--help"])
+
+    assert result.exit_code == 0
+    assert "Manage known people" in result.stdout

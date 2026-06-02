@@ -12,12 +12,15 @@ from fly_on_the_wall.config import load_config
 from fly_on_the_wall.db import database
 from fly_on_the_wall.doctor import has_failures, run_checks
 from fly_on_the_wall.meetings import import_meeting
+from fly_on_the_wall.people import create_person, get_person, list_people
 
 app = typer.Typer(
     name="fot",
     help="Personal CLI note-taker for meeting audio.",
     no_args_is_help=True,
 )
+people_app = typer.Typer(help="Manage known people.", no_args_is_help=True)
+app.add_typer(people_app, name="people")
 console = Console()
 
 
@@ -79,3 +82,44 @@ def import_audio(
     console.print(f"Imported meeting {meeting.slug}")
     console.print(f"ID: {meeting.id}")
     console.print(f"Audio: {meeting.imported_audio_path}")
+
+
+@people_app.command("create")
+def people_create(name: str) -> None:
+    """Create a known person."""
+    with database() as connection:
+        person = create_person(connection, name)
+    console.print(f"Created person {person.display_name}")
+    console.print(f"ID: {person.id}")
+
+
+@people_app.command("list")
+def people_list() -> None:
+    """List known people."""
+    with database() as connection:
+        people = list_people(connection)
+
+    if not people:
+        console.print("No people found.")
+        return
+
+    table = Table(title="People")
+    table.add_column("Name")
+    table.add_column("ID")
+    for person in people:
+        table.add_row(person.display_name, person.id)
+    console.print(table)
+
+
+@people_app.command("show")
+def people_show(person: str) -> None:
+    """Show one known person."""
+    with database() as connection:
+        found = get_person(connection, person)
+
+    if found is None:
+        console.print(f"Person not found: {person}")
+        raise typer.Exit(code=1)
+
+    console.print(f"Name: {found.display_name}")
+    console.print(f"ID: {found.id}")

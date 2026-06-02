@@ -33,7 +33,7 @@
 - [x] **Render basic diarized transcript**
     Generate a readable transcript using provider-local speaker labels only.
 
-- [ ] **Add people commands**
+- [x] **Add people commands**
     Implement `people list`, `people create`, and `people show`.
 
 - [ ] **Model voice samples**
