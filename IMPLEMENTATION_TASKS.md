@@ -9,7 +9,7 @@
 - [x] **Create storage layout**
    Create application data directories under `~/.local/share/fly-on-the-wall/`.
 
-- [ ] **Add SQLite foundation**
+- [x] **Add SQLite foundation**
    Create database connection, migrations/bootstrap, and initial tables for meetings, people, stages, and provider runs.
 
 - [ ] **Implement `fot doctor`**
