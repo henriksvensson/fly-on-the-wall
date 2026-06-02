@@ -5,7 +5,7 @@ import httpx
 from fly_on_the_wall.secrets import get_api_key
 
 API_URL = "https://api.openai.com/v1/chat/completions"
-DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_MODEL = "gpt-5.4-nano"
 
 
 class OpenAICleanupError(RuntimeError):

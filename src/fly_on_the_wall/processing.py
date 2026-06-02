@@ -12,7 +12,7 @@ from fly_on_the_wall.glossary import load_glossary_terms
 from fly_on_the_wall.meetings import Meeting, import_meeting, latest_completed_provider_run
 from fly_on_the_wall.normalization import normalize_provider_run
 from fly_on_the_wall.providers.elevenlabs import run_transcription
-from fly_on_the_wall.providers.openai_cleanup import cleanup_transcript
+from fly_on_the_wall.providers.openai_cleanup import OpenAICleanupError, cleanup_transcript
 from fly_on_the_wall.rendering import render_named_transcript
 from fly_on_the_wall.secrets import get_api_key
 from fly_on_the_wall.storage import StoragePaths, ensure_storage_layout
@@ -60,11 +60,14 @@ def process_audio(
 
     if config.cleanup_mode == "light" and get_api_key("openai"):
         _report(progress, "Running OpenAI light cleanup")
-        cleaned_transcript = cleanup_transcript(
-            cleaned_transcript,
-            glossary_terms=load_glossary_terms(config.glossary_path),
-            meeting_context=description,
-        )
+        try:
+            cleaned_transcript = cleanup_transcript(
+                cleaned_transcript,
+                glossary_terms=load_glossary_terms(config.glossary_path),
+                meeting_context=description,
+            )
+        except OpenAICleanupError as exc:
+            _report(progress, f"OpenAI cleanup failed; exporting deterministic cleanup ({exc})")
 
     _report(progress, "Exporting markdown")
     export = export_markdown_transcript(connection, meeting.id, cleaned_transcript, paths)
