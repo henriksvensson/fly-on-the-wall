@@ -66,7 +66,7 @@
 - [x] **Add unknown speaker listing**
     Implement `speakers unknown` filtered globally or by meeting.
 
-- [ ] **Add interactive speaker review**
+- [x] **Add interactive speaker review**
     Show unknown speaker examples, optionally play clips, and support skip/assign/create-person actions.
 
 - [ ] **Add speaker assignment commands**

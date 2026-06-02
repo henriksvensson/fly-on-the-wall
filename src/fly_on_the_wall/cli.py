@@ -19,7 +19,7 @@ from fly_on_the_wall.meetings import (
 )
 from fly_on_the_wall.people import create_person, get_person, list_people
 from fly_on_the_wall.processing import process_audio
-from fly_on_the_wall.speakers import list_unknown_speakers
+from fly_on_the_wall.speakers import list_unknown_speakers, speaker_examples
 
 app = typer.Typer(
     name="fot",
@@ -185,6 +185,41 @@ def speakers_unknown(
             str(speaker["segment_count"]),
         )
     console.print(table)
+
+
+@speakers_app.command("review")
+def speakers_review(
+    meeting: Annotated[
+        str | None, typer.Option("--meeting", "-m", help="Meeting ID or slug.")
+    ] = None,
+) -> None:
+    """Interactively review unknown speakers."""
+    with database() as connection:
+        speakers = list_unknown_speakers(connection, meeting)
+        examples_by_speaker = {
+            speaker["id"]: speaker_examples(connection, speaker["id"], limit=1)
+            for speaker in speakers
+        }
+
+    if not speakers:
+        console.print("No unknown speakers found.")
+        return
+
+    for speaker in speakers:
+        console.print(f"Unknown speaker: {speaker['id']}")
+        console.print(f"Meeting: {speaker['meeting_slug']}")
+        console.print(f"Label: {speaker['label']}")
+        examples = examples_by_speaker[speaker["id"]]
+        if examples:
+            console.print(f"Example: {examples[0]['text']}")
+
+        action = typer.prompt("Action [s=skip, u=keep unknown, p=play placeholder]", default="s")
+        if action == "p":
+            console.print("Audio playback will be available after clip extraction is wired in.")
+        elif action == "u":
+            console.print("Kept as unknown.")
+        else:
+            console.print("Skipped.")
 
 
 @people_app.command("create")

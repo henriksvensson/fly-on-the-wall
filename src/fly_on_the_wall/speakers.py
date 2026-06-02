@@ -33,3 +33,17 @@ def list_unknown_speakers(
         params,
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+def speaker_examples(connection: Connection, local_speaker_id: str, limit: int = 3) -> list[dict]:
+    rows = connection.execute(
+        """
+        SELECT text, start_time, end_time
+        FROM segments
+        WHERE local_speaker_id = ?
+        ORDER BY sequence
+        LIMIT ?
+        """,
+        (local_speaker_id, limit),
+    ).fetchall()
+    return [dict(row) for row in rows]

@@ -38,3 +38,10 @@ def test_speakers_group_exists() -> None:
 
     assert result.exit_code == 0
     assert "Review and assign speakers" in result.stdout
+
+
+def test_speakers_review_command_exists() -> None:
+    result = runner.invoke(app, ["speakers", "review", "--help"])
+
+    assert result.exit_code == 0
+    assert "Interactively review unknown speakers" in result.stdout
