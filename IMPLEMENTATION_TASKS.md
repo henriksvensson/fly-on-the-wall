@@ -30,7 +30,7 @@
 - [x] **Normalize transcript output**
     Convert provider responses into stable internal segments and local speakers.
 
-- [ ] **Render basic diarized transcript**
+- [x] **Render basic diarized transcript**
     Generate a readable transcript using provider-local speaker labels only.
 
 - [ ] **Add people commands**
