@@ -39,7 +39,7 @@
 - [x] **Model voice samples**
     Store confirmed voice samples, source spans, extracted clips, and embedding metadata.
 
-- [ ] **Implement local speaker embeddings**
+- [x] **Implement local speaker embeddings**
     Extract representative clips and cache embeddings for local speakers and voice samples.
 
 - [ ] **Implement speaker matching**
