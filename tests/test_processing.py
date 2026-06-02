@@ -309,6 +309,73 @@ def test_process_audio_reuses_openai_cleanup_and_analysis_cache(
     assert "Cached analysis." in second.export.analysis_path.read_text()
 
 
+def test_process_audio_cleanup_cache_includes_prompt_version(
+    tmp_path: Path, monkeypatch
+) -> None:
+    audio_path = tmp_path / "meeting.m4a"
+    audio_path.write_bytes(b"audio")
+    storage = ensure_storage_layout(tmp_path / "storage")
+
+    def fake_transcribe(
+        connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
+    ) -> str:
+        raw_path = storage.artifacts / meeting_id / "raw.json"
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        raw_path.write_text(
+            json.dumps(
+                {
+                    "language_code": "sv",
+                    "words": [
+                        {"speaker_id": "speaker_0", "text": "Hej", "start": 0, "end": 0.2}
+                    ],
+                }
+            )
+        )
+        connection.execute(
+            """
+            INSERT INTO provider_runs(id, meeting_id, provider, model, raw_response_path, status)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("run-1", meeting_id, "elevenlabs", "scribe_v2", str(raw_path), "done"),
+        )
+        return "run-1"
+
+    cleanup_calls = 0
+
+    def fake_cleanup(*args, **kwargs) -> str:
+        nonlocal cleanup_calls
+        cleanup_calls += 1
+        return f"**Unknown speaker 1:** Cleaned {cleanup_calls}"
+
+    monkeypatch.setattr("fly_on_the_wall.processing.get_api_key", lambda provider: "test-key")
+    monkeypatch.setattr("fly_on_the_wall.processing.cleanup_transcript", fake_cleanup)
+
+    with database(tmp_path / "fly.db") as connection:
+        first = process_audio(
+            connection,
+            audio_path,
+            "Intro Call",
+            AppConfig(cleanup_mode="light"),
+            storage,
+            transcribe_fn=fake_transcribe,
+        )
+        monkeypatch.setattr(
+            "fly_on_the_wall.processing.CLEANUP_PROMPT_VERSION", "test-prompt-version-2"
+        )
+        second = process_audio(
+            connection,
+            audio_path,
+            "Intro Call",
+            AppConfig(cleanup_mode="light"),
+            storage,
+            transcribe_fn=fake_transcribe,
+        )
+
+    assert cleanup_calls == 2
+    assert "Cleaned 1" in first.export.transcript_path.read_text()
+    assert "Cleaned 2" in second.export.transcript_path.read_text()
+
+
 def test_refresh_meeting_reexports_without_transcription(tmp_path: Path) -> None:
     audio_path = tmp_path / "meeting.m4a"
     audio_path.write_bytes(b"audio")

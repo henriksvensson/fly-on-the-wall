@@ -5,7 +5,8 @@ import httpx
 from fly_on_the_wall.secrets import get_api_key
 
 API_URL = "https://api.openai.com/v1/chat/completions"
-DEFAULT_MODEL = "gpt-5.4-nano"
+DEFAULT_MODEL = "gpt-5.4-mini"
+CLEANUP_PROMPT_VERSION = "2026-06-02-mini-general-cleanup-v3"
 
 
 class OpenAICleanupError(RuntimeError):
@@ -55,9 +56,12 @@ def _system_prompt(glossary_terms: list[str] | None, meeting_context: str | None
     glossary = ", ".join(glossary_terms or []) or "none"
     context = meeting_context or "none"
     return f"""
-You lightly clean meeting transcripts.
+You lightly clean meeting transcripts for readability.
 Preserve speaker names, speaker order, source labels, language, and meaning.
 Fix punctuation, casing, obvious spacing, and lightly broken phrasing.
+Remove obvious filler words, hesitation sounds, and repeated false starts when they do not
+change meaning.
+Preserve standalone acknowledgements such as yes/no/okay/mm and Swedish ja/nej/okej/mm.
 Do not summarize, invent details, remove uncertainty markers, or add new content.
 Return only the cleaned transcript.
 Meeting context: {context}

@@ -26,11 +26,12 @@ from fly_on_the_wall.providers.openai_analysis import (
     fallback_analysis,
 )
 from fly_on_the_wall.providers.openai_cleanup import (
-    DEFAULT_MODEL as DEFAULT_CLEANUP_MODEL,
-)
-from fly_on_the_wall.providers.openai_cleanup import (
+    CLEANUP_PROMPT_VERSION,
     OpenAICleanupError,
     cleanup_transcript,
+)
+from fly_on_the_wall.providers.openai_cleanup import (
+    DEFAULT_MODEL as DEFAULT_CLEANUP_MODEL,
 )
 from fly_on_the_wall.rendering import render_named_transcript
 from fly_on_the_wall.secrets import get_api_key
@@ -155,6 +156,7 @@ def _refresh_provider_run(
             "\n".join(
                 [
                     DEFAULT_CLEANUP_MODEL,
+                    CLEANUP_PROMPT_VERSION,
                     description or "",
                     "\n".join(glossary_terms),
                     deterministic_transcript,
