@@ -48,7 +48,7 @@
 - [x] **Render named transcript**
     Replace local speaker labels with `Name`, `Name?`, or `Unknown` while preserving source labels.
 
-- [ ] **Add deterministic cleanup**
+- [x] **Add deterministic cleanup**
     Merge adjacent same-speaker utterances, normalize whitespace, and remove empty fragments.
 
 - [ ] **Add OpenAI light cleanup**
