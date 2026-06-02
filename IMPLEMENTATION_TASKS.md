@@ -6,7 +6,7 @@
 - [x] **Add app configuration**
    Load global config from `~/.config/fly-on-the-wall/config.yaml` and API keys from environment variables.
 
-- [ ] **Create storage layout**
+- [x] **Create storage layout**
    Create application data directories under `~/.local/share/fly-on-the-wall/`.
 
 - [ ] **Add SQLite foundation**
