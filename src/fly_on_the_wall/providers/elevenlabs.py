@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import httpx
 
-from fly_on_the_wall.config import get_api_key
+from fly_on_the_wall.secrets import get_api_key
 from fly_on_the_wall.storage import StoragePaths, storage_paths
 
 API_URL = "https://api.elevenlabs.io/v1/speech-to-text"

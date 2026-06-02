@@ -82,10 +82,9 @@ def load_config(path: Path | None = None) -> AppConfig:
 
 
 def get_api_key(provider: str) -> str | None:
-    env_var = API_KEY_ENV_VARS.get(provider.lower())
-    if env_var is None:
-        return None
-    return os.environ.get(env_var) or None
+    from fly_on_the_wall.secrets import get_api_key as get_secret_api_key
+
+    return get_secret_api_key(provider)
 
 
 def _read_yaml_mapping(path: Path) -> dict[str, Any]:

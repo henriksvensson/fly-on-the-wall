@@ -29,6 +29,7 @@ def test_cleanup_transcript_calls_openai_and_returns_content() -> None:
 
 def test_cleanup_transcript_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr("keyring.get_password", lambda service, provider: None)
 
     with pytest.raises(OpenAICleanupError, match="Missing OPENAI_API_KEY"):
         cleanup_transcript("Person B: hej")

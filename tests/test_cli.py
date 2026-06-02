@@ -45,3 +45,10 @@ def test_speakers_review_command_exists() -> None:
 
     assert result.exit_code == 0
     assert "Interactively review unknown speakers" in result.stdout
+
+
+def test_secrets_group_exists() -> None:
+    result = runner.invoke(app, ["secrets", "--help"])
+
+    assert result.exit_code == 0
+    assert "Manage API keys in the OS keyring" in result.stdout

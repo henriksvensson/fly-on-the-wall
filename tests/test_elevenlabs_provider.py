@@ -30,6 +30,7 @@ def test_transcribe_audio_requires_api_key(tmp_path: Path, monkeypatch: pytest.M
     audio_path = tmp_path / "meeting.m4a"
     audio_path.write_bytes(b"audio")
     monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    monkeypatch.setattr("keyring.get_password", lambda service, provider: None)
 
     with pytest.raises(ElevenLabsError, match="Missing ELEVENLABS_API_KEY"):
         transcribe_audio(audio_path)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from fly_on_the_wall.config import get_api_key
+from fly_on_the_wall.secrets import get_api_key
 
 API_URL = "https://api.openai.com/v1/chat/completions"
 DEFAULT_MODEL = "gpt-4o-mini"

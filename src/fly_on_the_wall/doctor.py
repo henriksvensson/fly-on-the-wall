@@ -4,7 +4,8 @@ import sys
 from dataclasses import dataclass
 from shutil import which
 
-from fly_on_the_wall.config import API_KEY_ENV_VARS, default_config_path, load_config
+from fly_on_the_wall.config import default_config_path, load_config
+from fly_on_the_wall.secrets import get_api_key_status
 from fly_on_the_wall.storage import storage_paths
 
 
@@ -42,28 +43,33 @@ def run_checks() -> list[DoctorCheck]:
 
     config = load_config()
     provider = config.default_transcription_provider
-    env_var = API_KEY_ENV_VARS[provider]
+    provider_status = get_api_key_status(provider)
     checks.append(
         DoctorCheck(
             name=f"{provider} api key",
-            ok=_env_has_value(env_var),
-            detail=f"{env_var} is {'set' if _env_has_value(env_var) else 'not set'}",
+            ok=provider_status.available,
+            detail=_secret_detail(provider_status.source, provider_status.env_var),
         )
     )
+    openai_status = get_api_key_status("openai")
     checks.append(
         DoctorCheck(
             name="openai api key",
-            ok=_env_has_value("OPENAI_API_KEY"),
-            detail=f"OPENAI_API_KEY is {'set' if _env_has_value('OPENAI_API_KEY') else 'not set'}",
+            ok=openai_status.available,
+            detail=_secret_detail(openai_status.source, openai_status.env_var),
         )
     )
     return checks
 
 
-def _env_has_value(name: str) -> bool:
-    from os import environ
-
-    return bool(environ.get(name))
+def _secret_detail(source: str, env_var: str | None) -> str:
+    if source == "env":
+        return f"{env_var} is set"
+    if source == "keyring":
+        return "set in OS keyring"
+    if source == "missing":
+        return f"{env_var} is not set and no keyring entry was found"
+    return "unknown provider"
 
 
 def has_failures(checks: list[DoctorCheck]) -> bool:

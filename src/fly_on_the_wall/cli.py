@@ -20,6 +20,13 @@ from fly_on_the_wall.meetings import (
 from fly_on_the_wall.people import create_person, get_person, list_people
 from fly_on_the_wall.processing import process_audio
 from fly_on_the_wall.reanalysis import list_stale_stages, mark_speaker_reanalysis_stale
+from fly_on_the_wall.secrets import (
+    SecretError,
+    get_api_key_status,
+    known_providers,
+    remove_api_key,
+    set_api_key,
+)
 from fly_on_the_wall.speakers import (
     assign_speaker_to_person,
     create_person_from_speaker,
@@ -36,10 +43,12 @@ people_app = typer.Typer(help="Manage known people.", no_args_is_help=True)
 meetings_app = typer.Typer(help="Inspect meetings.", no_args_is_help=True)
 speakers_app = typer.Typer(help="Review and assign speakers.", no_args_is_help=True)
 reanalyze_app = typer.Typer(help="Mark and inspect stale analysis.", no_args_is_help=True)
+secrets_app = typer.Typer(help="Manage API keys in the OS keyring.", no_args_is_help=True)
 app.add_typer(people_app, name="people")
 app.add_typer(meetings_app, name="meetings")
 app.add_typer(speakers_app, name="speakers")
 app.add_typer(reanalyze_app, name="reanalyze")
+app.add_typer(secrets_app, name="secrets")
 console = Console()
 
 
@@ -313,3 +322,39 @@ def people_show(person: str) -> None:
 
     console.print(f"Name: {found.display_name}")
     console.print(f"ID: {found.id}")
+
+
+@secrets_app.command("status")
+def secrets_status() -> None:
+    """Show whether API keys are available without printing values."""
+    table = Table(title="Secrets")
+    table.add_column("Provider")
+    table.add_column("Source")
+    table.add_column("Env Var")
+    for provider in known_providers():
+        status = get_api_key_status(provider)
+        table.add_row(provider, status.source, status.env_var or "")
+    console.print(table)
+
+
+@secrets_app.command("set")
+def secrets_set(provider: str) -> None:
+    """Store an API key in the OS keyring."""
+    value = typer.prompt(f"{provider} API key", hide_input=True)
+    try:
+        set_api_key(provider, value)
+    except SecretError as exc:
+        console.print(str(exc))
+        raise typer.Exit(code=1) from exc
+    console.print(f"Stored {provider.lower()} API key in OS keyring.")
+
+
+@secrets_app.command("remove")
+def secrets_remove(provider: str) -> None:
+    """Remove an API key from the OS keyring."""
+    try:
+        remove_api_key(provider)
+    except SecretError as exc:
+        console.print(str(exc))
+        raise typer.Exit(code=1) from exc
+    console.print(f"Removed {provider.lower()} API key from OS keyring if it existed.")

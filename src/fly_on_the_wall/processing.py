@@ -6,7 +6,7 @@ from pathlib import Path
 from sqlite3 import Connection
 
 from fly_on_the_wall.cleanup import deterministic_cleanup
-from fly_on_the_wall.config import AppConfig, get_api_key
+from fly_on_the_wall.config import AppConfig
 from fly_on_the_wall.exporting import ExportResult, export_markdown_transcript
 from fly_on_the_wall.glossary import load_glossary_terms
 from fly_on_the_wall.meetings import Meeting, import_meeting
@@ -14,6 +14,7 @@ from fly_on_the_wall.normalization import normalize_provider_run
 from fly_on_the_wall.providers.elevenlabs import run_transcription
 from fly_on_the_wall.providers.openai_cleanup import cleanup_transcript
 from fly_on_the_wall.rendering import render_named_transcript
+from fly_on_the_wall.secrets import get_api_key
 from fly_on_the_wall.storage import StoragePaths, ensure_storage_layout
 
 TranscribeFn = Callable[[Connection, str, Path, StoragePaths], str]

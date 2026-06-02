@@ -60,6 +60,11 @@ def test_get_api_key_reads_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     assert get_api_key("openai") == "test-key"
 
 
-def test_get_api_key_returns_none_for_missing_or_unknown_provider() -> None:
+def test_get_api_key_returns_none_for_missing_or_unknown_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr("keyring.get_password", lambda service, provider: None)
+
     assert get_api_key("openai") is None
     assert get_api_key("unknown") is None
