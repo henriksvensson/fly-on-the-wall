@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,9 +26,7 @@ def export_markdown_transcript(
     transcript: str,
     storage: StoragePaths | None = None,
 ) -> ExportResult:
-    meeting = connection.execute(
-        "SELECT slug, title FROM meetings WHERE id = ?", (meeting_id,)
-    ).fetchone()
+    meeting = connection.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
     if meeting is None:
         raise ValueError(f"Meeting does not exist: {meeting_id}")
 
@@ -39,7 +38,7 @@ def export_markdown_transcript(
     manifest_path = output_dir / "manifest.json"
     output_dir.mkdir(parents=True, exist_ok=False)
 
-    markdown = _markdown_document(meeting["title"], transcript)
+    markdown = _markdown_document(dict(meeting), transcript)
     transcript_path.write_text(markdown)
     manifest_path.write_text(
         json.dumps(
@@ -66,8 +65,69 @@ def export_markdown_transcript(
     return ExportResult(export_id, output_dir, transcript_path, manifest_path)
 
 
-def _markdown_document(title: str, transcript: str) -> str:
-    return f"# {title}\n\n## Transcript\n\n{transcript.strip()}\n"
+def _markdown_document(meeting: dict, transcript: str) -> str:
+    turns = _readable_turns(transcript)
+    people = _participants(turns)
+    date, time = _date_time(meeting.get("created_at"))
+    lines = [
+        f"# {meeting['title']}",
+        "",
+        f"Date: {date}",
+        f"Time: {time}",
+        "Location: Unknown",
+        "Position: Unknown",
+        f"People: {', '.join(people) if people else 'Unknown'}",
+        "",
+        "## Transcript",
+        "",
+    ]
+    for speaker, text in turns:
+        lines.append(f"**{speaker}:** {text}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _readable_turns(transcript: str) -> list[tuple[str, str]]:
+    unknown_speakers: dict[str, str] = {}
+    turns: list[tuple[str, str]] = []
+    for block in [block.strip() for block in transcript.split("\n\n") if block.strip()]:
+        speaker, text, source_label = _parse_turn(block)
+        if speaker == "Unknown":
+            key = source_label or speaker
+            if key not in unknown_speakers:
+                unknown_speakers[key] = f"Unknown speaker {len(unknown_speakers) + 1}"
+            speaker = unknown_speakers[key]
+        turns.append((speaker, text))
+    return turns
+
+
+def _parse_turn(block: str) -> tuple[str, str, str | None]:
+    speaker, separator, text = block.partition(":")
+    if not separator:
+        return "Unknown", block, None
+
+    match = re.match(
+        r"^(?P<name>.*?)(?:\s+\[[^\]]+\])?(?:\s+\((?P<source>[^)]+)\))?$",
+        speaker.strip(),
+    )
+    if match is None:
+        return speaker.strip() or "Unknown", text.strip(), None
+    return match.group("name").strip() or "Unknown", text.strip(), match.group("source")
+
+
+def _participants(turns: list[tuple[str, str]]) -> list[str]:
+    participants: list[str] = []
+    for speaker, _ in turns:
+        if speaker not in participants:
+            participants.append(speaker)
+    return participants
+
+
+def _date_time(created_at: str | None) -> tuple[str, str]:
+    if not created_at:
+        return "Unknown", "Unknown"
+    date, _, time = created_at.partition(" ")
+    return date or "Unknown", time or "Unknown"
 
 
 def _sha256(value: str) -> str:

@@ -49,7 +49,7 @@ def test_process_audio_runs_to_markdown_export(tmp_path: Path) -> None:
         )
 
     assert result.export.transcript_path.exists()
-    assert "Unknown [sv] (speaker_0): Hej" in result.export.transcript_path.read_text()
+    assert "**Unknown speaker 1:** Hej" in result.export.transcript_path.read_text()
 
 
 def test_process_audio_reuses_existing_meeting_and_provider_run(tmp_path: Path) -> None:
@@ -216,5 +216,5 @@ def test_process_audio_exports_when_openai_cleanup_fails(tmp_path: Path, monkeyp
         )
 
     assert result.export.transcript_path.exists()
-    assert "Unknown [sv] (speaker_0): Hej" in result.export.transcript_path.read_text()
+    assert "**Unknown speaker 1:** Hej" in result.export.transcript_path.read_text()
     assert any(message.startswith("OpenAI cleanup failed") for message in progress_messages)

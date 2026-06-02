@@ -11,15 +11,33 @@ def test_export_markdown_transcript_writes_immutable_snapshot(tmp_path: Path) ->
 
     with database(tmp_path / "fly.db") as connection:
         connection.execute(
-            "INSERT INTO meetings(id, slug, title, language) VALUES (?, ?, ?, ?)",
-            ("meeting-1", "intro-call", "Intro Call", "sv"),
+            """
+            INSERT INTO meetings(id, slug, title, language, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("meeting-1", "intro-call", "Intro Call", "sv", "2026-06-02 10:09:00"),
         )
-        first = export_markdown_transcript(connection, "meeting-1", "Person B: Hej", storage)
+        first = export_markdown_transcript(
+            connection,
+            "meeting-1",
+            "Person B [sv] (speaker_0): Hej\n\nUnknown [sv] (speaker_1): Hallå",
+            storage,
+        )
         second = export_markdown_transcript(connection, "meeting-1", "Person B: Hej", storage)
         rows = connection.execute("SELECT * FROM exports ORDER BY created_at").fetchall()
 
     assert first.output_dir != second.output_dir
-    assert first.transcript_path.read_text() == "# Intro Call\n\n## Transcript\n\nPerson B: Hej\n"
+    assert first.transcript_path.read_text() == (
+        "# Intro Call\n\n"
+        "Date: 2026-06-02\n"
+        "Time: 10:09:00\n"
+        "Location: Unknown\n"
+        "Position: Unknown\n"
+        "People: Person B, Unknown speaker 1\n\n"
+        "## Transcript\n\n"
+        "**Person B:** Hej\n\n"
+        "**Unknown speaker 1:** Hallå\n"
+    )
     assert json.loads(first.manifest_path.read_text())["meeting_id"] == "meeting-1"
     assert len(rows) == 2
 
