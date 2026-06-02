@@ -88,3 +88,41 @@ def unique_slug(connection: Connection, base_slug: str) -> str:
 def _slug_exists(connection: Connection, slug: str) -> bool:
     row = connection.execute("SELECT 1 FROM meetings WHERE slug = ?", (slug,)).fetchone()
     return row is not None
+
+
+def list_meetings(connection: Connection) -> list[dict]:
+    return [
+        dict(row)
+        for row in connection.execute(
+            "SELECT id, slug, title, language, created_at FROM meetings ORDER BY created_at DESC"
+        ).fetchall()
+    ]
+
+
+def get_meeting(connection: Connection, meeting_id_or_slug: str) -> dict | None:
+    row = connection.execute(
+        """
+        SELECT * FROM meetings
+        WHERE id = ? OR slug = ?
+        """,
+        (meeting_id_or_slug, meeting_id_or_slug),
+    ).fetchone()
+    return None if row is None else dict(row)
+
+
+def meeting_stage_status(connection: Connection, meeting_id_or_slug: str) -> list[dict]:
+    meeting = get_meeting(connection, meeting_id_or_slug)
+    if meeting is None:
+        return []
+    return [
+        dict(row)
+        for row in connection.execute(
+            """
+            SELECT stage_name, status, error_message, updated_at
+            FROM pipeline_stages
+            WHERE meeting_id = ?
+            ORDER BY stage_name
+            """,
+            (meeting["id"],),
+        ).fetchall()
+    ]

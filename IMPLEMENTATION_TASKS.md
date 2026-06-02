@@ -60,7 +60,7 @@
 - [x] **Implement `fot process`**
     Run import through export as one convenience command using the same stage runner.
 
-- [ ] **Add meeting commands**
+- [x] **Add meeting commands**
     Implement `meetings list`, `meetings show`, and `status`.
 
 - [ ] **Add unknown speaker listing**

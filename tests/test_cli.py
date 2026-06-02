@@ -24,3 +24,10 @@ def test_people_group_exists() -> None:
 
     assert result.exit_code == 0
     assert "Manage known people" in result.stdout
+
+
+def test_meetings_group_exists() -> None:
+    result = runner.invoke(app, ["meetings", "--help"])
+
+    assert result.exit_code == 0
+    assert "Inspect meetings" in result.stdout

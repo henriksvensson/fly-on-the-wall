@@ -11,7 +11,12 @@ from fly_on_the_wall import __version__
 from fly_on_the_wall.config import load_config
 from fly_on_the_wall.db import database
 from fly_on_the_wall.doctor import has_failures, run_checks
-from fly_on_the_wall.meetings import import_meeting
+from fly_on_the_wall.meetings import (
+    get_meeting,
+    import_meeting,
+    list_meetings,
+    meeting_stage_status,
+)
 from fly_on_the_wall.people import create_person, get_person, list_people
 from fly_on_the_wall.processing import process_audio
 
@@ -21,7 +26,9 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 people_app = typer.Typer(help="Manage known people.", no_args_is_help=True)
+meetings_app = typer.Typer(help="Inspect meetings.", no_args_is_help=True)
 app.add_typer(people_app, name="people")
+app.add_typer(meetings_app, name="meetings")
 console = Console()
 
 
@@ -100,6 +107,53 @@ def process(
 
     console.print(f"Processed meeting {result.meeting.slug}")
     console.print(f"Export: {result.export.transcript_path}")
+
+
+@meetings_app.command("list")
+def meetings_list() -> None:
+    """List imported meetings."""
+    with database() as connection:
+        meetings = list_meetings(connection)
+    if not meetings:
+        console.print("No meetings found.")
+        return
+    table = Table(title="Meetings")
+    table.add_column("Slug")
+    table.add_column("Title")
+    table.add_column("Language")
+    for meeting in meetings:
+        table.add_row(meeting["slug"], meeting["title"], meeting["language"])
+    console.print(table)
+
+
+@meetings_app.command("show")
+def meetings_show(meeting: str) -> None:
+    """Show one meeting."""
+    with database() as connection:
+        found = get_meeting(connection, meeting)
+    if found is None:
+        console.print(f"Meeting not found: {meeting}")
+        raise typer.Exit(code=1)
+    console.print(f"Title: {found['title']}")
+    console.print(f"Slug: {found['slug']}")
+    console.print(f"ID: {found['id']}")
+
+
+@app.command()
+def status(meeting: str) -> None:
+    """Show pipeline status for a meeting."""
+    with database() as connection:
+        stages = meeting_stage_status(connection, meeting)
+    if not stages:
+        console.print(f"No stage status found for meeting: {meeting}")
+        return
+    table = Table(title="Pipeline Status")
+    table.add_column("Stage")
+    table.add_column("Status")
+    table.add_column("Error")
+    for stage in stages:
+        table.add_row(stage["stage_name"], stage["status"], stage["error_message"] or "")
+    console.print(table)
 
 
 @people_app.command("create")
