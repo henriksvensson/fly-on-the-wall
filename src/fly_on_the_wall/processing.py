@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from sqlite3 import Connection
 
+from fly_on_the_wall.cache import read_cached_text, text_sha256, write_cached_text
 from fly_on_the_wall.cleanup import deterministic_cleanup
 from fly_on_the_wall.config import AppConfig
 from fly_on_the_wall.exporting import ExportResult, export_markdown_transcript
@@ -12,7 +13,19 @@ from fly_on_the_wall.glossary import load_glossary_terms
 from fly_on_the_wall.meetings import Meeting, import_meeting, latest_completed_provider_run
 from fly_on_the_wall.normalization import normalize_provider_run
 from fly_on_the_wall.providers.elevenlabs import run_transcription
-from fly_on_the_wall.providers.openai_cleanup import OpenAICleanupError, cleanup_transcript
+from fly_on_the_wall.providers.openai_analysis import (
+    DEFAULT_ANALYSIS_MODEL,
+    OpenAIAnalysisError,
+    analyze_meeting,
+    fallback_analysis,
+)
+from fly_on_the_wall.providers.openai_cleanup import (
+    DEFAULT_MODEL as DEFAULT_CLEANUP_MODEL,
+)
+from fly_on_the_wall.providers.openai_cleanup import (
+    OpenAICleanupError,
+    cleanup_transcript,
+)
 from fly_on_the_wall.rendering import render_named_transcript
 from fly_on_the_wall.secrets import get_api_key
 from fly_on_the_wall.storage import StoragePaths, ensure_storage_layout
@@ -56,21 +69,42 @@ def process_audio(
     _report(progress, "Rendering named transcript")
     named_transcript = render_named_transcript(connection, provider_run_id, storage=paths)
     _report(progress, "Running deterministic cleanup")
-    cleaned_transcript = deterministic_cleanup(named_transcript)
+    deterministic_transcript = deterministic_cleanup(named_transcript)
+    cleaned_transcript = deterministic_transcript
 
     if config.cleanup_mode == "light" and get_api_key("openai"):
-        _report(progress, "Running OpenAI light cleanup")
-        try:
-            cleaned_transcript = cleanup_transcript(
-                cleaned_transcript,
-                glossary_terms=load_glossary_terms(config.glossary_path),
-                meeting_context=description,
+        glossary_terms = load_glossary_terms(config.glossary_path)
+        cleanup_cache_key = text_sha256(
+            "\n".join(
+                [
+                    DEFAULT_CLEANUP_MODEL,
+                    description or "",
+                    "\n".join(glossary_terms),
+                    deterministic_transcript,
+                ]
             )
-        except OpenAICleanupError as exc:
-            _report(progress, f"OpenAI cleanup failed; exporting deterministic cleanup ({exc})")
+        )
+        cleanup_cache_dir = paths.artifacts / meeting.id / "llm-cleanup"
+        cached_cleanup = read_cached_text(cleanup_cache_dir, cleanup_cache_key)
+        if cached_cleanup is not None:
+            _report(progress, "Reusing OpenAI light cleanup")
+            cleaned_transcript = cached_cleanup
+        else:
+            _report(progress, "Running OpenAI light cleanup")
+            try:
+                cleaned_transcript = cleanup_transcript(
+                    deterministic_transcript,
+                    glossary_terms=glossary_terms,
+                    meeting_context=description,
+                )
+                write_cached_text(cleanup_cache_dir, cleanup_cache_key, cleaned_transcript)
+            except OpenAICleanupError as exc:
+                _report(progress, f"OpenAI cleanup failed; exporting deterministic cleanup ({exc})")
+
+    analysis = _analyze_transcript(paths, meeting.id, cleaned_transcript, description, progress)
 
     _report(progress, "Exporting markdown")
-    export = export_markdown_transcript(connection, meeting.id, cleaned_transcript, paths)
+    export = export_markdown_transcript(connection, meeting.id, cleaned_transcript, analysis, paths)
     _report(progress, "Done")
     return ProcessResult(meeting, provider_run_id, export)
 
@@ -84,3 +118,33 @@ def _run_elevenlabs_transcription(
 def _report(progress: ProgressFn | None, message: str) -> None:
     if progress is not None:
         progress(message)
+
+
+def _analyze_transcript(
+    storage: StoragePaths,
+    meeting_id: str,
+    transcript: str,
+    description: str | None,
+    progress: ProgressFn | None,
+) -> str:
+    if not get_api_key("openai"):
+        return fallback_analysis("OPENAI_API_KEY is missing")
+
+    analysis_cache_key = text_sha256(
+        "\n".join([DEFAULT_ANALYSIS_MODEL, description or "", transcript])
+    )
+    analysis_cache_dir = storage.artifacts / meeting_id / "analysis"
+    cached_analysis = read_cached_text(analysis_cache_dir, analysis_cache_key)
+    if cached_analysis is not None:
+        _report(progress, "Reusing meeting analysis")
+        return cached_analysis
+
+    _report(progress, "Analyzing meeting")
+    try:
+        analysis = analyze_meeting(transcript, meeting_context=description)
+    except OpenAIAnalysisError as exc:
+        _report(progress, f"Meeting analysis failed; exporting fallback analysis ({exc})")
+        return fallback_analysis(str(exc))
+
+    write_cached_text(analysis_cache_dir, analysis_cache_key, analysis)
+    return analysis

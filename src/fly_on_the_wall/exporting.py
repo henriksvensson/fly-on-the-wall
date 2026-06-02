@@ -17,6 +17,7 @@ class ExportResult:
     id: str
     output_dir: Path
     transcript_path: Path
+    analysis_path: Path
     manifest_path: Path
 
 
@@ -24,6 +25,7 @@ def export_markdown_transcript(
     connection: Connection,
     meeting_id: str,
     transcript: str,
+    analysis: str,
     storage: StoragePaths | None = None,
 ) -> ExportResult:
     meeting = connection.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
@@ -35,11 +37,14 @@ def export_markdown_transcript(
     paths = storage or storage_paths()
     output_dir = paths.exports / meeting["slug"] / f"{timestamp}-{export_id[:8]}"
     transcript_path = output_dir / "transcript.md"
+    analysis_path = output_dir / "analysis.md"
     manifest_path = output_dir / "manifest.json"
     output_dir.mkdir(parents=True, exist_ok=False)
 
     markdown = _markdown_document(dict(meeting), transcript)
     transcript_path.write_text(markdown)
+    analysis_markdown = analysis.strip() + "\n"
+    analysis_path.write_text(analysis_markdown)
     manifest_path.write_text(
         json.dumps(
             {
@@ -47,7 +52,9 @@ def export_markdown_transcript(
                 "meeting_id": meeting_id,
                 "format": "markdown",
                 "transcript_path": str(transcript_path),
-                "sha256": _sha256(markdown),
+                "analysis_path": str(analysis_path),
+                "transcript_sha256": _sha256(markdown),
+                "analysis_sha256": _sha256(analysis_markdown),
             },
             indent=2,
         )
@@ -62,7 +69,7 @@ def export_markdown_transcript(
             """,
             (export_id, meeting_id, "markdown", str(output_dir), str(manifest_path)),
         )
-    return ExportResult(export_id, output_dir, transcript_path, manifest_path)
+    return ExportResult(export_id, output_dir, transcript_path, analysis_path, manifest_path)
 
 
 def _markdown_document(meeting: dict, transcript: str) -> str:

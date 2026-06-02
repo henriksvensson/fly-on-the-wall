@@ -135,7 +135,8 @@ def process(
         )
 
     console.print(f"Processed meeting {result.meeting.slug}")
-    console.print(f"Export: {result.export.transcript_path}")
+    console.print(f"Transcript: {result.export.transcript_path}")
+    console.print(f"Analysis: {result.export.analysis_path}")
     console.print(f"Review unknown speakers: fot speakers unknown --meeting {result.meeting.slug}")
 
 

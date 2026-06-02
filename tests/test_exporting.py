@@ -21,9 +21,12 @@ def test_export_markdown_transcript_writes_immutable_snapshot(tmp_path: Path) ->
             connection,
             "meeting-1",
             "Person B [sv] (speaker_0): Hej\n\nUnknown [sv] (speaker_1): Hallå",
+            "# Meeting Analysis\n\n## Summary\n\nShort summary.",
             storage,
         )
-        second = export_markdown_transcript(connection, "meeting-1", "Person B: Hej", storage)
+        second = export_markdown_transcript(
+            connection, "meeting-1", "Person B: Hej", "# Meeting Analysis", storage
+        )
         rows = connection.execute("SELECT * FROM exports ORDER BY created_at").fetchall()
 
     assert first.output_dir != second.output_dir
@@ -38,14 +41,16 @@ def test_export_markdown_transcript_writes_immutable_snapshot(tmp_path: Path) ->
         "**Person B:** Hej\n\n"
         "**Unknown speaker 1:** Hallå\n"
     )
+    assert first.analysis_path.read_text() == "# Meeting Analysis\n\n## Summary\n\nShort summary.\n"
     assert json.loads(first.manifest_path.read_text())["meeting_id"] == "meeting-1"
+    assert json.loads(first.manifest_path.read_text())["analysis_path"] == str(first.analysis_path)
     assert len(rows) == 2
 
 
 def test_export_markdown_transcript_rejects_missing_meeting(tmp_path: Path) -> None:
     with database(tmp_path / "fly.db") as connection:
         try:
-            export_markdown_transcript(connection, "missing", "Person B: Hej")
+            export_markdown_transcript(connection, "missing", "Person B: Hej", "# Meeting Analysis")
         except ValueError as exc:
             assert "Meeting does not exist" in str(exc)
         else:
