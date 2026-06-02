@@ -21,7 +21,7 @@
 - [x] **Build audio adapter**
    Wrap FFmpeg operations for duration checks, conversion, normalization, and clip extraction.
 
-- [ ] **Add pipeline stage runner**
+- [x] **Add pipeline stage runner**
    Track stage state in SQLite and run pending stages synchronously with resume/retry behavior.
 
 - [ ] **Implement ElevenLabs transcription provider**
