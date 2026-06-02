@@ -24,7 +24,7 @@
 - [x] **Add pipeline stage runner**
    Track stage state in SQLite and run pending stages synchronously with resume/retry behavior.
 
-- [ ] **Implement ElevenLabs transcription provider**
+- [x] **Implement ElevenLabs transcription provider**
    Upload audio, store raw provider response, and create a provider run record.
 
 - [ ] **Normalize transcript output**
