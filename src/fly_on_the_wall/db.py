@@ -31,11 +31,6 @@ SCHEMA_STATEMENTS = (
     )
     """,
     """
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_meetings_audio_sha256
-    ON meetings(audio_sha256)
-    WHERE audio_sha256 IS NOT NULL
-    """,
-    """
     CREATE TABLE IF NOT EXISTS people (
         id TEXT PRIMARY KEY,
         display_name TEXT NOT NULL UNIQUE,

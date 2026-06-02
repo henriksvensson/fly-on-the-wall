@@ -49,6 +49,45 @@ def test_bootstrap_database_adds_audio_hash_column(tmp_path: Path) -> None:
     assert "audio_sha256" in columns
 
 
+def test_bootstrap_database_migrates_existing_meetings_table(tmp_path: Path) -> None:
+    database_path = tmp_path / "fly.db"
+    with database(database_path) as connection:
+        connection.execute("DROP INDEX IF EXISTS idx_meetings_audio_sha256")
+        connection.execute("ALTER TABLE meetings RENAME TO meetings_old")
+        connection.execute(
+            """
+            CREATE TABLE meetings (
+                id TEXT PRIMARY KEY,
+                slug TEXT NOT NULL UNIQUE,
+                title TEXT NOT NULL,
+                description TEXT,
+                language TEXT NOT NULL,
+                original_audio_path TEXT,
+                imported_audio_path TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        connection.execute("DROP TABLE meetings_old")
+
+    bootstrap_database(database_path)
+
+    with database(database_path) as connection:
+        columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(meetings)").fetchall()
+        }
+        index = connection.execute(
+            """
+            SELECT name FROM sqlite_master
+            WHERE type = 'index' AND name = 'idx_meetings_audio_sha256'
+            """
+        ).fetchone()
+
+    assert "audio_sha256" in columns
+    assert index is not None
+
+
 def test_database_context_enables_foreign_keys(tmp_path: Path) -> None:
     with database(tmp_path / "fly.db") as connection:
         row = connection.execute("PRAGMA foreign_keys").fetchone()
