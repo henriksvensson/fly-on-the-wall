@@ -1,0 +1,14 @@
+.env
+.venv-pyannote/
+__pycache__/
+*.py[cod]
+
+# Local/generated transcription outputs and private meeting data.
+audio-samples/
+speaker-profiles/
+transcript.txt
+transcript.raw.json
+
+# Local caches and editor/OS noise.
+.DS_Store
+.cache/
