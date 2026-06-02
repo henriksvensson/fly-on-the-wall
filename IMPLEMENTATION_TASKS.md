@@ -75,7 +75,7 @@
 - [x] **Add reanalysis commands**
     Mark stale speaker-dependent stages and rerun `reanalyze speakers` or `reanalyze stale`.
 
-- [ ] **Add glossary support**
+- [x] **Add glossary support**
     Load global glossary and pass known names/domain terms into cleanup.
 
 - [ ] **Add golden fixture tests**

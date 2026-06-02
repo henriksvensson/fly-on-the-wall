@@ -8,6 +8,7 @@ from sqlite3 import Connection
 from fly_on_the_wall.cleanup import deterministic_cleanup
 from fly_on_the_wall.config import AppConfig, get_api_key
 from fly_on_the_wall.exporting import ExportResult, export_markdown_transcript
+from fly_on_the_wall.glossary import load_glossary_terms
 from fly_on_the_wall.meetings import Meeting, import_meeting
 from fly_on_the_wall.normalization import normalize_provider_run
 from fly_on_the_wall.providers.elevenlabs import run_transcription
@@ -45,7 +46,11 @@ def process_audio(
     cleaned_transcript = deterministic_cleanup(named_transcript)
 
     if config.cleanup_mode == "light" and get_api_key("openai"):
-        cleaned_transcript = cleanup_transcript(cleaned_transcript)
+        cleaned_transcript = cleanup_transcript(
+            cleaned_transcript,
+            glossary_terms=load_glossary_terms(config.glossary_path),
+            meeting_context=description,
+        )
 
     export = export_markdown_transcript(connection, meeting.id, cleaned_transcript, paths)
     return ProcessResult(meeting, provider_run_id, export)
