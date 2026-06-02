@@ -72,7 +72,7 @@
 - [x] **Add speaker assignment commands**
     Implement `speakers assign` and `speakers create-person` with correction history.
 
-- [ ] **Add reanalysis commands**
+- [x] **Add reanalysis commands**
     Mark stale speaker-dependent stages and rerun `reanalyze speakers` or `reanalyze stale`.
 
 - [ ] **Add glossary support**

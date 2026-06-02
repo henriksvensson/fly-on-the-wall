@@ -19,6 +19,7 @@ from fly_on_the_wall.meetings import (
 )
 from fly_on_the_wall.people import create_person, get_person, list_people
 from fly_on_the_wall.processing import process_audio
+from fly_on_the_wall.reanalysis import list_stale_stages, mark_speaker_reanalysis_stale
 from fly_on_the_wall.speakers import (
     assign_speaker_to_person,
     create_person_from_speaker,
@@ -34,9 +35,11 @@ app = typer.Typer(
 people_app = typer.Typer(help="Manage known people.", no_args_is_help=True)
 meetings_app = typer.Typer(help="Inspect meetings.", no_args_is_help=True)
 speakers_app = typer.Typer(help="Review and assign speakers.", no_args_is_help=True)
+reanalyze_app = typer.Typer(help="Mark and inspect stale analysis.", no_args_is_help=True)
 app.add_typer(people_app, name="people")
 app.add_typer(meetings_app, name="meetings")
 app.add_typer(speakers_app, name="speakers")
+app.add_typer(reanalyze_app, name="reanalyze")
 console = Console()
 
 
@@ -241,6 +244,30 @@ def speakers_create_person(local_speaker_id: str, name: str) -> None:
     with database() as connection:
         assignment = create_person_from_speaker(connection, local_speaker_id, name)
     console.print(f"Created and assigned {assignment['name']}")
+
+
+@reanalyze_app.command("speakers")
+def reanalyze_speakers(meeting: str) -> None:
+    """Mark speaker-dependent stages stale for one meeting."""
+    with database() as connection:
+        stages = mark_speaker_reanalysis_stale(connection, meeting)
+    console.print(f"Marked stale: {', '.join(stages)}")
+
+
+@reanalyze_app.command("stale")
+def reanalyze_stale() -> None:
+    """List stale stages that should be rerun."""
+    with database() as connection:
+        stale = list_stale_stages(connection)
+    if not stale:
+        console.print("No stale stages found.")
+        return
+    table = Table(title="Stale Stages")
+    table.add_column("Meeting")
+    table.add_column("Stage")
+    for stage in stale:
+        table.add_row(stage["meeting_slug"], stage["stage_name"])
+    console.print(table)
 
 
 @people_app.command("create")
