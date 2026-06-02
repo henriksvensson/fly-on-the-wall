@@ -22,6 +22,13 @@ class Meeting:
     audio_sha256: str | None = None
 
 
+@dataclass(frozen=True)
+class DeleteMeetingResult:
+    id: str
+    slug: str
+    removed_paths: tuple[Path, ...]
+
+
 def import_meeting(
     connection: Connection,
     audio_path: Path,
@@ -177,3 +184,126 @@ def meeting_stage_status(connection: Connection, meeting_id_or_slug: str) -> lis
             (meeting["id"],),
         ).fetchall()
     ]
+
+
+def delete_meeting(
+    connection: Connection,
+    meeting_id_or_slug: str,
+    storage: StoragePaths | None = None,
+) -> DeleteMeetingResult:
+    meeting = get_meeting(connection, meeting_id_or_slug)
+    if meeting is None:
+        raise ValueError(f"Meeting not found: {meeting_id_or_slug}")
+
+    paths = storage or ensure_storage_layout()
+    removed_paths = _meeting_owned_paths(connection, meeting, paths)
+    local_speaker_ids = _local_speaker_ids(connection, meeting["id"])
+    voice_sample_ids = _meeting_voice_sample_ids(connection, meeting["id"])
+
+    with connection:
+        _delete_corrections(connection, meeting["id"], local_speaker_ids)
+        _delete_voice_samples(connection, voice_sample_ids)
+        connection.execute("DELETE FROM meetings WHERE id = ?", (meeting["id"],))
+
+    for path in removed_paths:
+        _remove_path(path)
+
+    return DeleteMeetingResult(
+        id=meeting["id"],
+        slug=meeting["slug"],
+        removed_paths=tuple(path for path in removed_paths if not path.exists()),
+    )
+
+
+def _meeting_owned_paths(
+    connection: Connection, meeting: dict, storage: StoragePaths
+) -> list[Path]:
+    paths = [
+        storage.audio / meeting["slug"],
+        storage.artifacts / meeting["id"],
+        storage.exports / meeting["slug"],
+    ]
+
+    for key in ("imported_audio_path",):
+        if meeting.get(key):
+            paths.append(Path(meeting[key]))
+
+    for row in connection.execute(
+        "SELECT output_dir, manifest_path FROM exports WHERE meeting_id = ?", (meeting["id"],)
+    ).fetchall():
+        paths.append(Path(row["output_dir"]))
+        paths.append(Path(row["manifest_path"]))
+
+    for row in connection.execute(
+        """
+        SELECT audio_path, embedding_path
+        FROM voice_samples
+        WHERE source_meeting_id = ?
+        """,
+        (meeting["id"],),
+    ).fetchall():
+        paths.append(Path(row["audio_path"]))
+        if row["embedding_path"]:
+            paths.append(Path(row["embedding_path"]))
+
+    return _deduplicate_paths(paths)
+
+
+def _local_speaker_ids(connection: Connection, meeting_id: str) -> list[str]:
+    return [
+        row["id"]
+        for row in connection.execute(
+            "SELECT id FROM local_speakers WHERE meeting_id = ?", (meeting_id,)
+        ).fetchall()
+    ]
+
+
+def _meeting_voice_sample_ids(connection: Connection, meeting_id: str) -> list[str]:
+    return [
+        row["id"]
+        for row in connection.execute(
+            "SELECT id FROM voice_samples WHERE source_meeting_id = ?", (meeting_id,)
+        ).fetchall()
+    ]
+
+
+def _delete_corrections(
+    connection: Connection, meeting_id: str, local_speaker_ids: list[str]
+) -> None:
+    connection.execute("DELETE FROM corrections WHERE meeting_id = ?", (meeting_id,))
+    if local_speaker_ids:
+        placeholders = ", ".join("?" for _ in local_speaker_ids)
+        connection.execute(
+            f"DELETE FROM corrections WHERE local_speaker_id IN ({placeholders})",
+            local_speaker_ids,
+        )
+
+
+def _delete_voice_samples(connection: Connection, voice_sample_ids: list[str]) -> None:
+    if not voice_sample_ids:
+        return
+    placeholders = ", ".join("?" for _ in voice_sample_ids)
+    connection.execute(
+        f"DELETE FROM voice_samples WHERE id IN ({placeholders})",
+        voice_sample_ids,
+    )
+
+
+def _remove_path(path: Path) -> None:
+    if not path.exists():
+        return
+    if path.is_dir():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
+def _deduplicate_paths(paths: list[Path]) -> list[Path]:
+    seen: set[Path] = set()
+    deduplicated: list[Path] = []
+    for path in sorted(paths, key=lambda item: len(item.parts), reverse=True):
+        resolved = path.expanduser()
+        if resolved not in seen:
+            seen.add(resolved)
+            deduplicated.append(resolved)
+    return deduplicated

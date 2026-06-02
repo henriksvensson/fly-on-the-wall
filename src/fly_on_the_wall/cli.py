@@ -12,6 +12,7 @@ from fly_on_the_wall.config import load_config
 from fly_on_the_wall.db import database
 from fly_on_the_wall.doctor import has_failures, run_checks
 from fly_on_the_wall.meetings import (
+    delete_meeting,
     get_meeting,
     import_meeting,
     list_meetings,
@@ -159,6 +160,34 @@ def meetings_show(meeting: str) -> None:
     console.print(f"Title: {found['title']}")
     console.print(f"Slug: {found['slug']}")
     console.print(f"ID: {found['id']}")
+
+
+@meetings_app.command("remove")
+def meetings_remove(
+    meeting: str,
+    yes: Annotated[
+        bool, typer.Option("--yes", "-y", help="Delete without interactive confirmation.")
+    ] = False,
+) -> None:
+    """Completely remove a meeting and its stored files."""
+    with database() as connection:
+        found = get_meeting(connection, meeting)
+        if found is None:
+            console.print(f"Meeting not found: {meeting}")
+            raise typer.Exit(code=1)
+
+        if not yes:
+            confirmed = typer.confirm(
+                f"Delete meeting {found['slug']} and all stored data?", default=False
+            )
+            if not confirmed:
+                console.print("Cancelled.")
+                return
+
+        result = delete_meeting(connection, meeting)
+
+    console.print(f"Removed meeting {result.slug}")
+    console.print(f"Removed paths: {len(result.removed_paths)}")
 
 
 @app.command()

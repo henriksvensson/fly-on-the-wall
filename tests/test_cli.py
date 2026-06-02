@@ -33,6 +33,13 @@ def test_meetings_group_exists() -> None:
     assert "Inspect meetings" in result.stdout
 
 
+def test_meetings_remove_command_exists() -> None:
+    result = runner.invoke(app, ["meetings", "remove", "--help"])
+
+    assert result.exit_code == 0
+    assert "Completely remove a meeting" in result.stdout
+
+
 def test_speakers_group_exists() -> None:
     result = runner.invoke(app, ["speakers", "--help"])
 
