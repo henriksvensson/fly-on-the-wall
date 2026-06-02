@@ -31,3 +31,10 @@ def test_meetings_group_exists() -> None:
 
     assert result.exit_code == 0
     assert "Inspect meetings" in result.stdout
+
+
+def test_speakers_group_exists() -> None:
+    result = runner.invoke(app, ["speakers", "--help"])
+
+    assert result.exit_code == 0
+    assert "Review and assign speakers" in result.stdout

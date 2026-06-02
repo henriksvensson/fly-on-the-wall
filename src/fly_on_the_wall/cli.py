@@ -19,6 +19,7 @@ from fly_on_the_wall.meetings import (
 )
 from fly_on_the_wall.people import create_person, get_person, list_people
 from fly_on_the_wall.processing import process_audio
+from fly_on_the_wall.speakers import list_unknown_speakers
 
 app = typer.Typer(
     name="fot",
@@ -27,8 +28,10 @@ app = typer.Typer(
 )
 people_app = typer.Typer(help="Manage known people.", no_args_is_help=True)
 meetings_app = typer.Typer(help="Inspect meetings.", no_args_is_help=True)
+speakers_app = typer.Typer(help="Review and assign speakers.", no_args_is_help=True)
 app.add_typer(people_app, name="people")
 app.add_typer(meetings_app, name="meetings")
+app.add_typer(speakers_app, name="speakers")
 console = Console()
 
 
@@ -153,6 +156,34 @@ def status(meeting: str) -> None:
     table.add_column("Error")
     for stage in stages:
         table.add_row(stage["stage_name"], stage["status"], stage["error_message"] or "")
+    console.print(table)
+
+
+@speakers_app.command("unknown")
+def speakers_unknown(
+    meeting: Annotated[
+        str | None, typer.Option("--meeting", "-m", help="Meeting ID or slug.")
+    ] = None,
+) -> None:
+    """List unknown local speakers."""
+    with database() as connection:
+        speakers = list_unknown_speakers(connection, meeting)
+    if not speakers:
+        console.print("No unknown speakers found.")
+        return
+
+    table = Table(title="Unknown Speakers")
+    table.add_column("ID")
+    table.add_column("Meeting")
+    table.add_column("Label")
+    table.add_column("Segments")
+    for speaker in speakers:
+        table.add_row(
+            speaker["id"],
+            speaker["meeting_slug"],
+            speaker["label"],
+            str(speaker["segment_count"]),
+        )
     console.print(table)
 
 

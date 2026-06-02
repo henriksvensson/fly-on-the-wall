@@ -63,7 +63,7 @@
 - [x] **Add meeting commands**
     Implement `meetings list`, `meetings show`, and `status`.
 
-- [ ] **Add unknown speaker listing**
+- [x] **Add unknown speaker listing**
     Implement `speakers unknown` filtered globally or by meeting.
 
 - [ ] **Add interactive speaker review**
