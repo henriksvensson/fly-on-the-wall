@@ -168,6 +168,33 @@ def test_speakers_review_quit_still_prompts_for_refresh(monkeypatch) -> None:
     assert "Refresh skipped." in result.stdout
 
 
+def test_speakers_review_can_create_new_person_without_voice_sample(monkeypatch) -> None:
+    @contextmanager
+    def fake_database():
+        yield object()
+
+    speakers = [{"id": "speaker-1", "meeting_slug": "intro", "label": "speaker_0"}]
+
+    monkeypatch.setattr(cli, "database", fake_database)
+    monkeypatch.setattr(cli, "list_unknown_speakers", lambda connection, meeting=None: speakers)
+    monkeypatch.setattr(cli, "speaker_examples", lambda connection, speaker_id, limit=1: [])
+    monkeypatch.setattr(cli, "prepare_speaker_review_clip", lambda connection, speaker_id: None)
+    monkeypatch.setattr(cli, "_select_speaker_review_action", lambda clip_path: "o")
+    monkeypatch.setattr(cli.typer, "prompt", lambda *args, **kwargs: "Person B")
+    monkeypatch.setattr(
+        cli,
+        "assign_speaker_to_person",
+        lambda connection, speaker_id, person: {"name": person},
+    )
+    monkeypatch.setattr(cli, "_speaker_review_follow_up", lambda connection, changed: set())
+
+    result = runner.invoke(app, ["meetings", "speakers", "review"])
+
+    assert result.exit_code == 0
+    assert "Created known person Person B" in result.stdout
+    assert "without voice sample" in result.stdout
+
+
 def test_speaker_review_follow_up_can_reanalyze_unknown_speakers(monkeypatch) -> None:
     monkeypatch.setattr(cli, "_select_speaker_review_follow_up_action", lambda: "g")
     monkeypatch.setattr(

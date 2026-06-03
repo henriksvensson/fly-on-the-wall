@@ -654,9 +654,18 @@ def speakers_review(
                     console.print(f"Voice sample: {result.voice_sample.audio_path}")
                     changed_meetings.add(speaker["meeting_slug"])
                     break
+                if action == "o":
+                    name = typer.prompt("New known person name")
+                    assignment = assign_speaker_to_person(connection, speaker["id"], name)
+                    console.print(f"Created known person {assignment['name']}")
+                    console.print(
+                        f"Assigned meeting speaker to {assignment['name']} without voice sample."
+                    )
+                    changed_meetings.add(speaker["meeting_slug"])
+                    break
                 if action == "i":
                     mark_speaker_ignored(connection, speaker["id"])
-                    console.print("Ignored meeting speaker.")
+                    console.print("Ignored meeting speaker; it will not appear in future reviews.")
                     changed_meetings.add(speaker["meeting_slug"])
                     break
                 if action == "s":
@@ -1068,8 +1077,9 @@ def _select_speaker_review_action(clip_path: Path | None) -> str:
             MenuChoice("a", "Assign with voice sample", "a"),
             MenuChoice("n", "Assign only", "n"),
             MenuChoice("c", "New known person with voice sample", "c"),
-            MenuChoice("i", "Ignore speaker", "i"),
-            MenuChoice("s", "Skip", "s"),
+            MenuChoice("o", "New known person only", "o"),
+            MenuChoice("i", "Ignore speaker forever", "i"),
+            MenuChoice("s", "Skip this time", "s"),
             MenuChoice("q", "Quit review", "q"),
         ]
     )
