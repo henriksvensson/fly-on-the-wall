@@ -28,6 +28,7 @@ from fly_on_the_wall.processing import process_audio, refresh_meeting
 from fly_on_the_wall.publishing import (
     add_publish_target,
     list_publish_targets,
+    publish_all_meetings,
     publish_meeting,
     remove_publish_target,
     set_publish_target_enabled,
@@ -343,6 +344,30 @@ def publish_meeting_command(
             raise typer.Exit(code=1) from exc
     console.print(f"Published {meeting} to {result.target.name}")
     console.print(f"Output: {result.output_path}")
+
+
+@publish_app.command("all")
+def publish_all_command(
+    target: Annotated[str, typer.Option("--target", "-t", help="Publish target name or id.")],
+    only_unpublished: Annotated[
+        bool,
+        typer.Option("--only-unpublished", help="Skip meetings already published to this target."),
+    ] = False,
+) -> None:
+    """Publish all exported meetings to a configured target."""
+    with database() as connection:
+        try:
+            results = publish_all_meetings(connection, target, only_unpublished)
+        except ValueError as exc:
+            console.print(str(exc))
+            raise typer.Exit(code=1) from exc
+
+    if not results:
+        console.print("No meetings to publish.")
+        return
+    for result in results:
+        console.print(f"Published to {result.target.name}: {result.output_path}")
+    console.print(f"Published {len(results)} meeting(s).")
 
 
 @publish_targets_app.command("add")

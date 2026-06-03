@@ -110,6 +110,13 @@ def test_publish_meeting_command_exists() -> None:
     assert "Publish one meeting" in result.stdout
 
 
+def test_publish_all_command_exists() -> None:
+    result = runner.invoke(app, ["publish", "all", "--help"])
+
+    assert result.exit_code == 0
+    assert "Publish all exported meetings" in result.stdout
+
+
 def test_watch_run_command_is_event_driven() -> None:
     result = runner.invoke(app, ["watch", "run", "--help"])
 

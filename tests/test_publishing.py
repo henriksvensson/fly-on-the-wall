@@ -9,6 +9,7 @@ from fly_on_the_wall.processing import process_audio
 from fly_on_the_wall.publishing import (
     add_publish_target,
     list_publish_targets,
+    publish_all_meetings,
     publish_meeting,
     remove_publish_target,
 )
@@ -127,3 +128,110 @@ def test_process_audio_auto_publishes_enabled_targets(
     assert output_path.exists()
     assert result.meeting.title == "Manual Title"
     assert "# Manual Title" in output_path.read_text()
+
+
+def test_publish_all_meetings_publishes_every_exported_meeting(tmp_path: Path) -> None:
+    storage = ensure_storage_layout(tmp_path / "storage")
+    target_path = tmp_path / "vault" / "Meetings"
+
+    with database(tmp_path / "fly.db") as connection:
+        for index in range(2):
+            meeting_id = f"meeting-{index}"
+            connection.execute(
+                """
+                INSERT INTO meetings(id, slug, title, language, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    meeting_id,
+                    f"meeting-{index}",
+                    f"Meeting {index}",
+                    "sv",
+                    f"2026-06-0{index + 1} 10:00:00",
+                ),
+            )
+            export_markdown_transcript(
+                connection,
+                meeting_id,
+                "Person B: Hej där alla",
+                "# Meeting Analysis\n\n## Summary\n\nUseful discussion.",
+                storage,
+            )
+        add_publish_target(connection, "obsidian", target_path, "obsidian")
+
+        results = publish_all_meetings(connection, "obsidian")
+
+    assert len(results) == 2
+    assert (target_path / "2026-06-01 Meeting 0.md").exists()
+    assert (target_path / "2026-06-02 Meeting 1.md").exists()
+
+
+def test_publish_all_meetings_can_skip_already_published(tmp_path: Path) -> None:
+    storage = ensure_storage_layout(tmp_path / "storage")
+    target_path = tmp_path / "vault" / "Meetings"
+
+    with database(tmp_path / "fly.db") as connection:
+        connection.execute(
+            """
+            INSERT INTO meetings(id, slug, title, language, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("meeting-1", "meeting", "Meeting", "sv", "2026-06-01 10:00:00"),
+        )
+        export_markdown_transcript(
+            connection,
+            "meeting-1",
+            "Person B: Hej där alla",
+            "# Meeting Analysis\n\n## Summary\n\nUseful discussion.",
+            storage,
+        )
+        add_publish_target(connection, "obsidian", target_path, "obsidian")
+        first = publish_all_meetings(connection, "obsidian", only_unpublished=True)
+        second = publish_all_meetings(connection, "obsidian", only_unpublished=True)
+
+    assert len(first) == 1
+    assert second == []
+
+
+def test_publish_meeting_handles_legacy_manifest_without_analysis_path(tmp_path: Path) -> None:
+    target_path = tmp_path / "vault" / "Meetings"
+    export_dir = tmp_path / "exports" / "intro" / "snapshot"
+    export_dir.mkdir(parents=True)
+    transcript_path = export_dir / "transcript.md"
+    manifest_path = export_dir / "manifest.json"
+    transcript_path.write_text(
+        "# Intro Call\n\nDate: 2026-06-02\nTime: 10:09:00\n\n## Transcript\n\n**Person B:** Hej\n"
+    )
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "id": "legacy-export",
+                "meeting_id": "meeting-1",
+                "format": "markdown",
+                "transcript_path": str(transcript_path),
+            }
+        )
+    )
+
+    with database(tmp_path / "fly.db") as connection:
+        connection.execute(
+            """
+            INSERT INTO meetings(id, slug, title, language, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("meeting-1", "intro", "Intro Call", "sv", "2026-06-02 10:09:00"),
+        )
+        connection.execute(
+            """
+            INSERT INTO exports(id, meeting_id, format, output_dir, manifest_path)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("export-1", "meeting-1", "markdown", str(export_dir), str(manifest_path)),
+        )
+        add_publish_target(connection, "obsidian", target_path, "obsidian")
+
+        result = publish_meeting(connection, "intro", "obsidian")
+
+    note = result.output_path.read_text()
+    assert "No analysis export found" in note
+    assert "**Person B:** Hej" in note

@@ -136,7 +136,7 @@ def publish_meeting(
     export = _latest_export(connection, meeting["id"])
     transcript_path, analysis_path, manifest_path = _export_paths(export)
     transcript_markdown = transcript_path.read_text()
-    analysis_markdown = analysis_path.read_text()
+    analysis_markdown = _read_analysis_markdown(analysis_path)
     manifest = json.loads(manifest_path.read_text())
     output_path = _published_output_path(connection, meeting, target)
     content = _obsidian_note(meeting, transcript_markdown, analysis_markdown, manifest)
@@ -148,12 +148,50 @@ def publish_meeting(
     return PublishResult(target, output_path, content_hash)
 
 
+def publish_all_meetings(
+    connection: Connection, target_identifier: str, only_unpublished: bool = False
+) -> list[PublishResult]:
+    target = get_publish_target(connection, target_identifier)
+    if target is None:
+        raise ValueError(f"Publish target not found: {target_identifier}")
+
+    results: list[PublishResult] = []
+    for meeting_id in _publishable_meeting_ids(connection, target.id, only_unpublished):
+        results.append(publish_meeting(connection, meeting_id, target.id))
+    return results
+
+
 def publish_enabled_targets(connection: Connection, meeting_id: str) -> list[PublishResult]:
     results: list[PublishResult] = []
     for target in list_publish_targets(connection):
         if target.enabled and target.auto_publish:
             results.append(publish_meeting(connection, meeting_id, target.id))
     return results
+
+
+def _publishable_meeting_ids(
+    connection: Connection, target_id: str, only_unpublished: bool
+) -> list[str]:
+    rows = connection.execute(
+        """
+        SELECT meetings.id
+        FROM meetings
+        WHERE EXISTS (
+            SELECT 1 FROM exports
+            WHERE exports.meeting_id = meetings.id AND exports.format = 'markdown'
+        )
+        AND (
+            ? = 0 OR NOT EXISTS (
+                SELECT 1 FROM published_items
+                WHERE published_items.meeting_id = meetings.id
+                  AND published_items.target_id = ?
+            )
+        )
+        ORDER BY meetings.created_at
+        """,
+        (1 if only_unpublished else 0, target_id),
+    ).fetchall()
+    return [row["id"] for row in rows]
 
 
 def _target_from_row(row) -> PublishTarget:
@@ -203,10 +241,30 @@ def _latest_export(connection: Connection, meeting_id: str) -> dict:
     return dict(row)
 
 
-def _export_paths(export: dict) -> tuple[Path, Path, Path]:
+def _export_paths(export: dict) -> tuple[Path, Path | None, Path]:
     manifest_path = Path(export["manifest_path"])
     manifest = json.loads(manifest_path.read_text())
-    return Path(manifest["transcript_path"]), Path(manifest["analysis_path"]), manifest_path
+    transcript_path = Path(
+        manifest.get("transcript_path") or manifest_path.parent / "transcript.md"
+    )
+    analysis_path = _optional_manifest_path(
+        manifest, "analysis_path", manifest_path.parent / "analysis.md"
+    )
+    return transcript_path, analysis_path, manifest_path
+
+
+def _optional_manifest_path(manifest: dict, key: str, fallback: Path) -> Path | None:
+    if manifest.get(key):
+        return Path(manifest[key])
+    if fallback.exists():
+        return fallback
+    return None
+
+
+def _read_analysis_markdown(analysis_path: Path | None) -> str:
+    if analysis_path is not None and analysis_path.exists():
+        return analysis_path.read_text()
+    return "# Meeting Analysis\n\n## Summary\n\nNo analysis export found for this snapshot."
 
 
 def _published_output_path(connection: Connection, meeting: dict, target: PublishTarget) -> Path:
