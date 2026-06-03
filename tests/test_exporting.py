@@ -55,3 +55,37 @@ def test_export_markdown_transcript_rejects_missing_meeting(tmp_path: Path) -> N
             assert "Meeting does not exist" in str(exc)
         else:
             raise AssertionError("Expected ValueError")
+
+
+def test_export_markdown_transcript_prefers_recording_timestamp(tmp_path: Path) -> None:
+    storage = ensure_storage_layout(tmp_path / "storage")
+
+    with database(tmp_path / "fly.db") as connection:
+        connection.execute(
+            """
+            INSERT INTO meetings(id, slug, title, language, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("meeting-1", "intro-call", "Intro Call", "sv", "2026-06-03 12:00:00"),
+        )
+        connection.execute(
+            """
+            INSERT INTO audio_metadata(
+                id, meeting_id, recorded_at, recorded_at_source, recorded_at_confidence
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                "metadata-1",
+                "meeting-1",
+                "2026-06-02 10:09:00",
+                "metadata.title",
+                "high",
+            ),
+        )
+
+        result = export_markdown_transcript(
+            connection, "meeting-1", "Person B: Hej", "# Meeting Analysis", storage
+        )
+
+    assert "Date: 2026-06-02" in result.transcript_path.read_text()
+    assert "Time: 10:09:00" in result.transcript_path.read_text()

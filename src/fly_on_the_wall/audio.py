@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import time
@@ -28,6 +29,25 @@ def get_duration(audio_path: Path) -> float:
         return float(result.stdout.strip())
     except ValueError as exc:
         raise AudioError(f"Could not read duration for {audio_path}") from exc
+
+
+def probe_metadata(audio_path: Path) -> dict:
+    result = _run(
+        [
+            "ffprobe",
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            str(audio_path),
+        ]
+    )
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise AudioError(f"Could not parse metadata for {audio_path}") from exc
 
 
 def convert_to_wav(input_path: Path, output_path: Path) -> Path:

@@ -19,10 +19,22 @@ def test_slugify_normalizes_titles() -> None:
     assert slugify("!!!") == "meeting"
 
 
-def test_import_meeting_copies_audio_and_creates_record(tmp_path: Path) -> None:
+def test_import_meeting_copies_audio_and_creates_record(tmp_path: Path, monkeypatch) -> None:
     audio_path = tmp_path / "source.m4a"
     audio_path.write_bytes(b"fake audio")
     storage = ensure_storage_layout(tmp_path / "storage")
+    monkeypatch.setattr(
+        "fly_on_the_wall.audio_metadata.probe_metadata",
+        lambda path: {
+            "streams": [{"codec_type": "audio", "codec_name": "mp3", "sample_rate": "44100"}],
+            "format": {
+                "format_name": "mp3",
+                "duration": "12.5",
+                "size": "12345",
+                "tags": {"title": "2026-06-03 10:55:36 Custom"},
+            },
+        },
+    )
 
     with database(tmp_path / "fly.db") as connection:
         meeting = import_meeting(
@@ -34,6 +46,9 @@ def test_import_meeting_copies_audio_and_creates_record(tmp_path: Path) -> None:
             description="First call",
         )
         row = connection.execute("SELECT * FROM meetings WHERE id = ?", (meeting.id,)).fetchone()
+        metadata = connection.execute(
+            "SELECT * FROM audio_metadata WHERE meeting_id = ?", (meeting.id,)
+        ).fetchone()
 
     assert meeting.slug == "intro-call-with-person_b"
     assert meeting.imported_audio_path.read_bytes() == b"fake audio"
@@ -42,6 +57,10 @@ def test_import_meeting_copies_audio_and_creates_record(tmp_path: Path) -> None:
     assert row["description"] == "First call"
     assert row["language"] == "sv"
     assert row["audio_sha256"] == file_sha256(audio_path)
+    assert metadata["recorded_at"] == "2026-06-03 10:55:36"
+    assert metadata["recorded_at_confidence"] == "high"
+    assert metadata["duration_seconds"] == 12.5
+    assert Path(metadata["raw_metadata_path"]).exists()
 
 
 def test_import_meeting_uses_filename_as_provisional_title(tmp_path: Path) -> None:

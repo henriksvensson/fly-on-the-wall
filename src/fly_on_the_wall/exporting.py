@@ -28,7 +28,15 @@ def export_markdown_transcript(
     analysis: str,
     storage: StoragePaths | None = None,
 ) -> ExportResult:
-    meeting = connection.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
+    meeting = connection.execute(
+        """
+        SELECT meetings.*, audio_metadata.recorded_at, audio_metadata.recorded_at_confidence
+        FROM meetings
+        LEFT JOIN audio_metadata ON audio_metadata.meeting_id = meetings.id
+        WHERE meetings.id = ?
+        """,
+        (meeting_id,),
+    ).fetchone()
     if meeting is None:
         raise ValueError(f"Meeting does not exist: {meeting_id}")
 
@@ -75,7 +83,7 @@ def export_markdown_transcript(
 def _markdown_document(meeting: dict, transcript: str) -> str:
     turns = _readable_turns(transcript)
     people = _participants(turns)
-    date, time = _date_time(meeting.get("created_at"))
+    date, time = _date_time(_meeting_timestamp(meeting))
     lines = [
         f"# {meeting['title']}",
         "",
@@ -135,6 +143,12 @@ def _date_time(created_at: str | None) -> tuple[str, str]:
         return "Unknown", "Unknown"
     date, _, time = created_at.partition(" ")
     return date or "Unknown", time or "Unknown"
+
+
+def _meeting_timestamp(meeting: dict) -> str | None:
+    if meeting.get("recorded_at_confidence") in {"high", "medium"}:
+        return meeting.get("recorded_at")
+    return meeting.get("created_at")
 
 
 def _sha256(value: str) -> str:

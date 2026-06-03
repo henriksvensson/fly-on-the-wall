@@ -19,6 +19,25 @@ def test_get_duration_uses_ffprobe(monkeypatch: pytest.MonkeyPatch) -> None:
     assert commands[0][0] == "ffprobe"
 
 
+def test_probe_metadata_uses_ffprobe_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout='{"format":{"duration":"12.5"},"streams":[]}',
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert audio.probe_metadata(Path("meeting.m4a"))["format"]["duration"] == "12.5"
+    assert commands[0][0] == "ffprobe"
+    assert "-print_format" in commands[0]
+
+
 def test_normalize_for_embedding_builds_expected_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

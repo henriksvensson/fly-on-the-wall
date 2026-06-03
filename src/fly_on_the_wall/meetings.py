@@ -8,6 +8,7 @@ from pathlib import Path
 from sqlite3 import Connection
 from uuid import uuid4
 
+from fly_on_the_wall.audio_metadata import extract_and_store_audio_metadata
 from fly_on_the_wall.config import AppConfig
 from fly_on_the_wall.storage import StoragePaths, ensure_storage_layout
 
@@ -83,6 +84,7 @@ def import_meeting(
                 audio_sha256,
             ),
         )
+        extract_and_store_audio_metadata(connection, meeting_id, imported_audio_path, paths)
 
     return Meeting(
         id=meeting_id,
