@@ -23,6 +23,7 @@ def test_bootstrap_database_creates_file_and_schema(tmp_path: Path) -> None:
     assert "people" in tables
     assert "pipeline_stages" in tables
     assert "provider_runs" in tables
+    assert "service_prices" in tables
 
 
 def test_bootstrap_database_records_schema_version(tmp_path: Path) -> None:

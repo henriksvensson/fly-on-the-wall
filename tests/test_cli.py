@@ -264,6 +264,27 @@ def test_publish_all_command_exists() -> None:
     assert "Publish all exported meetings" in result.stdout
 
 
+def test_costs_group_exists() -> None:
+    result = runner.invoke(app, ["costs", "--help"])
+
+    assert result.exit_code == 0
+    assert "service usage" in result.stdout
+
+
+def test_costs_summary_command_exists() -> None:
+    result = runner.invoke(app, ["costs", "summary", "--help"])
+
+    assert result.exit_code == 0
+    assert "estimated external service costs" in result.stdout
+
+
+def test_costs_meeting_command_exists() -> None:
+    result = runner.invoke(app, ["costs", "meeting", "--help"])
+
+    assert result.exit_code == 0
+    assert "one meeting" in result.stdout
+
+
 def test_watch_run_command_is_event_driven() -> None:
     result = runner.invoke(app, ["watch", "run", "--help"])
 

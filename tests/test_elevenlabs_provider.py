@@ -42,7 +42,7 @@ def test_run_transcription_stores_raw_response_and_provider_run(tmp_path: Path) 
     storage = ensure_storage_layout(tmp_path / "storage")
 
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"text": "hej"})
+        return httpx.Response(200, json={"text": "hej", "audio_duration_secs": 10.0})
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
 
@@ -57,8 +57,14 @@ def test_run_transcription_stores_raw_response_and_provider_run(tmp_path: Path) 
         row = connection.execute(
             "SELECT * FROM provider_runs WHERE id = ?", (provider_run_id,)
         ).fetchone()
+        usage = connection.execute("SELECT * FROM service_usage").fetchone()
 
     assert row["provider"] == "elevenlabs"
     assert row["model"] == "scribe_v2"
     assert row["status"] == "done"
-    assert Path(row["raw_response_path"]).read_text().strip() == '{\n  "text": "hej"\n}'
+    assert Path(row["raw_response_path"]).read_text().strip() == (
+        '{\n  "text": "hej",\n  "audio_duration_secs": 10.0\n}'
+    )
+    assert usage["provider"] == "elevenlabs"
+    assert usage["input_quantity"] == 10.0
+    assert usage["estimated_cost_usd"] == 0.000611

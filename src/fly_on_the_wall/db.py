@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -7,7 +8,7 @@ from pathlib import Path
 
 from fly_on_the_wall.storage import ensure_storage_layout, storage_paths
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 16
 
 SCHEMA_STATEMENTS = (
     """
@@ -267,6 +268,142 @@ SCHEMA_STATEMENTS = (
         FOREIGN KEY(target_id) REFERENCES publish_targets(id) ON DELETE CASCADE
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS service_prices (
+        id TEXT PRIMARY KEY,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        service TEXT NOT NULL,
+        unit TEXT NOT NULL,
+        input_unit_price_usd REAL,
+        output_unit_price_usd REAL,
+        cached_input_unit_price_usd REAL,
+        currency TEXT NOT NULL DEFAULT 'USD',
+        source_name TEXT NOT NULL,
+        source_url TEXT,
+        pricing_json TEXT NOT NULL DEFAULT '{}',
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(provider, model, service, unit, source_name)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS service_usage (
+        id TEXT PRIMARY KEY,
+        meeting_id TEXT,
+        provider_run_id TEXT,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        service TEXT NOT NULL,
+        unit TEXT NOT NULL,
+        input_quantity REAL NOT NULL DEFAULT 0,
+        output_quantity REAL NOT NULL DEFAULT 0,
+        cache_hit INTEGER NOT NULL DEFAULT 0,
+        billable INTEGER NOT NULL DEFAULT 1,
+        input_unit_price_usd REAL,
+        output_unit_price_usd REAL,
+        estimated_cost_usd REAL,
+        currency TEXT NOT NULL DEFAULT 'USD',
+        usage_json TEXT NOT NULL DEFAULT '{}',
+        pricing_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE,
+        FOREIGN KEY(provider_run_id) REFERENCES provider_runs(id) ON DELETE SET NULL
+    )
+    """,
+)
+
+
+DEFAULT_SERVICE_PRICES = (
+    {
+        "id": "openai:gpt-5.4-mini:chat:token",
+        "provider": "openai",
+        "model": "gpt-5.4-mini",
+        "service": "chat",
+        "unit": "token",
+        "input_unit_price_usd": 0.00000075,
+        "output_unit_price_usd": 0.0000045,
+        "cached_input_unit_price_usd": 0.000000075,
+        "source_name": "openai-pricing",
+        "source_url": "https://openai.com/api/pricing/",
+        "pricing_json": {
+            "input_1m_tokens_usd": 0.75,
+            "output_1m_tokens_usd": 4.50,
+            "cached_input_1m_tokens_usd": 0.075,
+            "litellm_key": "gpt-5.4-mini",
+            "litellm_price_fields": {
+                "input_cost_per_token": 0.00000075,
+                "output_cost_per_token": 0.0000045,
+                "cache_read_input_token_cost": 0.000000075,
+            },
+        },
+    },
+    {
+        "id": "openai:gpt-5.4-nano:chat:token",
+        "provider": "openai",
+        "model": "gpt-5.4-nano",
+        "service": "chat",
+        "unit": "token",
+        "input_unit_price_usd": 0.0000002,
+        "output_unit_price_usd": 0.00000125,
+        "cached_input_unit_price_usd": 0.00000002,
+        "source_name": "openai-pricing",
+        "source_url": "https://openai.com/api/pricing/",
+        "pricing_json": {
+            "input_1m_tokens_usd": 0.20,
+            "output_1m_tokens_usd": 1.25,
+            "cached_input_1m_tokens_usd": 0.02,
+            "litellm_key": "gpt-5.4-nano",
+            "litellm_price_fields": {
+                "input_cost_per_token": 0.0000002,
+                "output_cost_per_token": 0.00000125,
+                "cache_read_input_token_cost": 0.00000002,
+            },
+        },
+    },
+    {
+        "id": "elevenlabs:scribe_v1:transcription:audio_second",
+        "provider": "elevenlabs",
+        "model": "scribe_v1",
+        "service": "transcription",
+        "unit": "audio_second",
+        "input_unit_price_usd": 0.0000611,
+        "output_unit_price_usd": 0.0,
+        "cached_input_unit_price_usd": None,
+        "source_name": "elevenlabs-pricing",
+        "source_url": "https://elevenlabs.io/pricing",
+        "pricing_json": {
+            "input_audio_hour_usd": 0.22,
+            "input_audio_second_usd": 0.0000611,
+            "litellm_key": "elevenlabs/scribe_v1",
+            "litellm_price_fields": {"input_cost_per_second": 0.0000611},
+            "note": "LiteLLM describes this as enterprise pricing from ElevenLabs pricing.",
+        },
+    },
+    {
+        "id": "elevenlabs:scribe_v2:transcription:audio_second",
+        "provider": "elevenlabs",
+        "model": "scribe_v2",
+        "service": "transcription",
+        "unit": "audio_second",
+        "input_unit_price_usd": 0.0000611,
+        "output_unit_price_usd": 0.0,
+        "cached_input_unit_price_usd": None,
+        "source_name": "elevenlabs-pricing",
+        "source_url": "https://elevenlabs.io/pricing",
+        "pricing_json": {
+            "input_audio_hour_usd": 0.22,
+            "input_audio_second_usd": 0.0000611,
+            "litellm_fallback_key": "elevenlabs/scribe_v1",
+            "inferred_for_model": "scribe_v2",
+            "litellm_price_fields": {"input_cost_per_second": 0.0000611},
+            "note": (
+                "Exact scribe_v2 entry was not present in LiteLLM; "
+                "seeded from Scribe pricing fallback."
+            ),
+        },
+    },
 )
 
 
@@ -301,6 +438,7 @@ def initialize_database(connection: sqlite3.Connection) -> None:
             "INSERT OR IGNORE INTO schema_migrations(version) VALUES (?)",
             (SCHEMA_VERSION,),
         )
+        _seed_default_service_prices(connection)
 
 
 def _ensure_column(
@@ -311,6 +449,53 @@ def _ensure_column(
     }
     if column_name not in columns:
         connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+
+
+def _seed_default_service_prices(connection: sqlite3.Connection) -> None:
+    for price in DEFAULT_SERVICE_PRICES:
+        connection.execute(
+            """
+            INSERT INTO service_prices(
+                id,
+                provider,
+                model,
+                service,
+                unit,
+                input_unit_price_usd,
+                output_unit_price_usd,
+                cached_input_unit_price_usd,
+                currency,
+                source_name,
+                source_url,
+                pricing_json,
+                active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(provider, model, service, unit, source_name) DO UPDATE SET
+                input_unit_price_usd = excluded.input_unit_price_usd,
+                output_unit_price_usd = excluded.output_unit_price_usd,
+                cached_input_unit_price_usd = excluded.cached_input_unit_price_usd,
+                currency = excluded.currency,
+                source_url = excluded.source_url,
+                pricing_json = excluded.pricing_json,
+                active = excluded.active,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (
+                price["id"],
+                price["provider"],
+                price["model"],
+                price["service"],
+                price["unit"],
+                price["input_unit_price_usd"],
+                price["output_unit_price_usd"],
+                price["cached_input_unit_price_usd"],
+                "USD",
+                price["source_name"],
+                price["source_url"],
+                json.dumps(price["pricing_json"], sort_keys=True),
+                1,
+            ),
+        )
 
 
 def bootstrap_database(database_path: Path | None = None) -> Path:

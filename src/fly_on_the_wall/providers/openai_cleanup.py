@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import httpx
 
 from fly_on_the_wall.secrets import get_api_key
@@ -21,6 +23,7 @@ def cleanup_transcript(
     model: str = DEFAULT_MODEL,
     api_key: str | None = None,
     client: httpx.Client | None = None,
+    usage_callback: Callable[[dict], None] | None = None,
 ) -> str:
     resolved_api_key = api_key or get_api_key("openai")
     if not resolved_api_key:
@@ -42,7 +45,10 @@ def cleanup_transcript(
             },
         )
         response.raise_for_status()
-        return _extract_content(response.json())
+        response_json = response.json()
+        if usage_callback is not None:
+            usage_callback(response_json)
+        return _extract_content(response_json)
     except httpx.HTTPStatusError as exc:
         message = f"OpenAI HTTP {exc.response.status_code}: {exc.response.text}"
         raise OpenAICleanupError(message) from exc

@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import httpx
 
+from fly_on_the_wall.costs import record_service_usage
 from fly_on_the_wall.secrets import get_api_key
 from fly_on_the_wall.storage import StoragePaths, storage_paths
 
@@ -87,6 +88,18 @@ def run_transcription(
     try:
         response = transcribe_audio(audio_path, api_key=api_key, client=client)
         raw_response_path.write_text(json.dumps(response, indent=2, ensure_ascii=False) + "\n")
+        duration = float(response.get("audio_duration_secs") or 0)
+        record_service_usage(
+            connection,
+            meeting_id=meeting_id,
+            provider_run_id=provider_run_id,
+            provider=PROVIDER,
+            model=MODEL,
+            service="transcription",
+            unit="audio_second",
+            input_quantity=duration,
+            usage={"audio_duration_secs": duration},
+        )
     except Exception:
         _set_provider_run_status(connection, provider_run_id, "failed")
         raise

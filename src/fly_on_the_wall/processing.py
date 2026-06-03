@@ -9,6 +9,7 @@ from sqlite3 import Connection
 from fly_on_the_wall.cache import read_cached_text, text_sha256, write_cached_text
 from fly_on_the_wall.cleanup import deterministic_cleanup
 from fly_on_the_wall.config import AppConfig
+from fly_on_the_wall.costs import record_openai_usage
 from fly_on_the_wall.embeddings import EmbeddingBackend
 from fly_on_the_wall.exporting import ExportResult, export_markdown_transcript
 from fly_on_the_wall.glossary import load_glossary_terms
@@ -203,6 +204,13 @@ def _refresh_provider_run(
                         deterministic_transcript,
                         glossary_terms=glossary_terms,
                         meeting_context=description,
+                        usage_callback=lambda response: record_openai_usage(
+                            connection,
+                            meeting_id=meeting.id,
+                            model=DEFAULT_CLEANUP_MODEL,
+                            service="cleanup",
+                            response=response,
+                        ),
                     )
                     write_cached_text(cleanup_cache_dir, cleanup_cache_key, cleaned_transcript)
                 except OpenAICleanupError as exc:
@@ -210,7 +218,9 @@ def _refresh_provider_run(
                         f"OpenAI cleanup failed; exporting deterministic cleanup ({exc})"
                     )
 
-    analysis = _analyze_transcript(paths, meeting.id, cleaned_transcript, description, progress)
+    analysis = _analyze_transcript(
+        connection, paths, meeting.id, cleaned_transcript, description, progress
+    )
     _suggest_and_apply_title(
         connection, paths, meeting.id, cleaned_transcript, analysis, description, progress
     )
@@ -269,6 +279,13 @@ def _suggest_and_apply_title(
                     transcript,
                     analysis,
                     meeting_context=description,
+                    usage_callback=lambda response: record_openai_usage(
+                        connection,
+                        meeting_id=meeting_id,
+                        model=DEFAULT_ANALYSIS_MODEL,
+                        service="title",
+                        response=response,
+                    ),
                 )
             except OpenAIAnalysisError as exc:
                 progress.message(f"Meeting title generation failed ({exc})")
@@ -371,6 +388,7 @@ def _format_elapsed(seconds: float) -> str:
 
 
 def _analyze_transcript(
+    connection: Connection,
     storage: StoragePaths,
     meeting_id: str,
     transcript: str,
@@ -391,7 +409,17 @@ def _analyze_transcript(
 
     with progress.step("Analyzing meeting"):
         try:
-            analysis = analyze_meeting(transcript, meeting_context=description)
+            analysis = analyze_meeting(
+                transcript,
+                meeting_context=description,
+                usage_callback=lambda response: record_openai_usage(
+                    connection,
+                    meeting_id=meeting_id,
+                    model=DEFAULT_ANALYSIS_MODEL,
+                    service="analysis",
+                    response=response,
+                ),
+            )
         except OpenAIAnalysisError as exc:
             progress.message(f"Meeting analysis failed; exporting fallback analysis ({exc})")
             return fallback_analysis(str(exc))

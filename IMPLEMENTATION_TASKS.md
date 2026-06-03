@@ -99,7 +99,7 @@
     very short/silent files or transcripts with little usable content, and mark them as ignored
     or failed without creating a normal meeting export.
 
-- [ ] **Track external service costs**
+- [x] **Track external service costs**
     Record provider usage, estimated pricing inputs, and calculated costs for external services
     such as transcription and LLM cleanup/analysis so users can inspect spending over time.
 

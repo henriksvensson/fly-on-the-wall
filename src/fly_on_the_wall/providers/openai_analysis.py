@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import httpx
 
 from fly_on_the_wall.providers.openai_cleanup import API_URL
@@ -18,6 +20,7 @@ def analyze_meeting(
     model: str = DEFAULT_ANALYSIS_MODEL,
     api_key: str | None = None,
     client: httpx.Client | None = None,
+    usage_callback: Callable[[dict], None] | None = None,
 ) -> str:
     resolved_api_key = api_key or get_api_key("openai")
     if not resolved_api_key:
@@ -39,7 +42,10 @@ def analyze_meeting(
             },
         )
         response.raise_for_status()
-        return _extract_content(response.json())
+        response_json = response.json()
+        if usage_callback is not None:
+            usage_callback(response_json)
+        return _extract_content(response_json)
     except httpx.HTTPStatusError as exc:
         message = f"OpenAI HTTP {exc.response.status_code}: {exc.response.text}"
         raise OpenAIAnalysisError(message) from exc
@@ -57,6 +63,7 @@ def suggest_meeting_title(
     model: str = DEFAULT_ANALYSIS_MODEL,
     api_key: str | None = None,
     client: httpx.Client | None = None,
+    usage_callback: Callable[[dict], None] | None = None,
 ) -> str:
     resolved_api_key = api_key or get_api_key("openai")
     if not resolved_api_key:
@@ -84,7 +91,10 @@ def suggest_meeting_title(
             },
         )
         response.raise_for_status()
-        return _clean_title(_extract_content(response.json()))
+        response_json = response.json()
+        if usage_callback is not None:
+            usage_callback(response_json)
+        return _clean_title(_extract_content(response_json))
     except httpx.HTTPStatusError as exc:
         message = f"OpenAI HTTP {exc.response.status_code}: {exc.response.text}"
         raise OpenAIAnalysisError(message) from exc
