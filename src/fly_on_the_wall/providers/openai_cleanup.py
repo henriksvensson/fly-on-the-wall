@@ -6,6 +6,7 @@ from fly_on_the_wall.secrets import get_api_key
 
 API_URL = "https://api.openai.com/v1/chat/completions"
 DEFAULT_MODEL = "gpt-5.4-mini"
+DEFAULT_CLEANUP_TIMEOUT_SECONDS = 1800
 CLEANUP_PROMPT_VERSION = "2026-06-02-mini-general-cleanup-v3"
 
 
@@ -26,7 +27,7 @@ def cleanup_transcript(
         raise OpenAICleanupError("Missing OPENAI_API_KEY.")
 
     close_client = client is None
-    http_client = client or httpx.Client(timeout=120)
+    http_client = client or httpx.Client(timeout=DEFAULT_CLEANUP_TIMEOUT_SECONDS)
     try:
         response = http_client.post(
             API_URL,
