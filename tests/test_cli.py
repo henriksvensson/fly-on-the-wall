@@ -143,14 +143,15 @@ def test_speakers_review_quit_still_prompts_for_refresh(monkeypatch) -> None:
         {"id": "speaker-1", "meeting_slug": "intro", "label": "speaker_0"},
         {"id": "speaker-2", "meeting_slug": "intro", "label": "speaker_1"},
     ]
-    actions = iter(["u", "q", "n"])
+    actions = iter(["u", "q"])
 
     monkeypatch.setattr(cli, "database", fake_database)
     monkeypatch.setattr(cli, "list_unknown_speakers", lambda connection, meeting=None: speakers)
     monkeypatch.setattr(cli, "speaker_examples", lambda connection, speaker_id, limit=1: [])
     monkeypatch.setattr(cli, "prepare_speaker_review_clip", lambda connection, speaker_id: None)
     monkeypatch.setattr(cli, "mark_unknown", lambda connection, speaker_id: None)
-    monkeypatch.setattr(cli.typer, "prompt", lambda *args, **kwargs: next(actions))
+    monkeypatch.setattr(cli, "_select_speaker_review_action", lambda clip_available: next(actions))
+    monkeypatch.setattr(cli, "_select_speaker_review_follow_up_action", lambda: "n")
 
     result = runner.invoke(app, ["meetings", "speakers", "review"])
 
@@ -161,7 +162,7 @@ def test_speakers_review_quit_still_prompts_for_refresh(monkeypatch) -> None:
 
 
 def test_speaker_review_follow_up_can_reanalyze_unknown_speakers(monkeypatch) -> None:
-    monkeypatch.setattr(cli.typer, "prompt", lambda *args, **kwargs: "g")
+    monkeypatch.setattr(cli, "_select_speaker_review_follow_up_action", lambda: "g")
     monkeypatch.setattr(
         cli,
         "rerun_speaker_matching_for_meetings",

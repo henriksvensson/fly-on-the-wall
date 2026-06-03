@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from time import sleep
 from typing import Annotated
 
 import typer
+from prompt_toolkit.application import Application
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.layout import HSplit, Layout, Window
+from prompt_toolkit.layout.controls import FormattedTextControl
 from rich.console import Console
 from rich.table import Table
 from watchfiles import watch
@@ -110,6 +115,13 @@ watch_app.add_typer(watch_folders_app, name="folders")
 app.add_typer(publish_app, name="publish")
 publish_app.add_typer(publish_targets_app, name="targets")
 console = Console()
+
+
+@dataclass(frozen=True)
+class MenuChoice:
+    shortcut: str | None
+    label: str
+    value: str | None
 
 
 def _version_callback(show_version: bool) -> None:
@@ -593,11 +605,7 @@ def speakers_review(
                 console.print(f"Clip: {clip_path}")
 
             while True:
-                action = typer.prompt(
-                    "Action [p=play, a=assign+sample, n=assign only, "
-                    "c=new person+sample, u=unknown, s=skip, q=quit]",
-                    default="p" if clip_path is not None else "s",
-                ).strip().lower()
+                action = _select_speaker_review_action(clip_path is not None)
                 if action == "p" and clip_path is not None:
                     try:
                         console.print("Playing. Press Enter to stop.")
@@ -664,7 +672,7 @@ def speakers_review(
                     console.print("Review cancelled.")
                     quit_review = True
                     break
-                console.print("Unknown action.")
+                console.print("Choose an available action.")
 
         if changed_meetings:
             refresh_meetings = _speaker_review_follow_up(connection, changed_meetings)
@@ -1010,10 +1018,7 @@ def _set_publish_target_enabled_command(identifier: str, enabled: bool) -> None:
 def _speaker_review_follow_up(connection, changed_meetings: set[str]) -> set[str]:
     console.print(f"Speaker review changed {len(changed_meetings)} meeting(s).")
     while True:
-        action = typer.prompt(
-            "Next [a=refresh affected, g=refresh speaker matching globally, n=do nothing]",
-            default="a",
-        ).strip().lower()
+        action = _select_speaker_review_follow_up_action()
         if action == "a":
             return set(changed_meetings)
         if action == "g":
@@ -1028,31 +1033,113 @@ def _speaker_review_follow_up(connection, changed_meetings: set[str]) -> set[str
         if action == "n":
             console.print("Refresh skipped. You can run refresh later.")
             return set()
-        console.print("Choose a, g, or n.")
+        console.print("Choose an available follow-up action.")
 
 
 def _select_person(connection) -> Person | None:
     people = list_people(connection)
     if not people:
-        console.print("No people found. Use create person instead.")
+        console.print("No known people found. Create a known person instead.")
         return None
 
-    table = Table(title="Select Person")
-    table.add_column("#")
-    table.add_column("Name")
-    for index, person in enumerate(people, start=1):
-        table.add_row(str(index), person.display_name)
-    console.print(table)
+    choices = [
+        MenuChoice(str(index) if index <= 9 else None, person.display_name, person.id)
+        for index, person in enumerate(people, start=1)
+    ]
+    choices.append(MenuChoice("c", "Cancel", None))
+    selected_person_id = _select_menu("Known person", choices)
+    if selected_person_id is None:
+        return None
+    return next(person for person in people if person.id == selected_person_id)
 
-    while True:
-        choice = typer.prompt("Person number [s=cancel]", default="s").strip().lower()
-        if choice == "s":
-            return None
-        if choice.isdigit():
-            index = int(choice)
-            if 1 <= index <= len(people):
-                return people[index - 1]
-        console.print("Choose a listed number or s to cancel.")
+
+def _select_speaker_review_action(clip_available: bool) -> str:
+    choices = []
+    if clip_available:
+        choices.append(MenuChoice("p", "Play clip", "p"))
+    choices.extend(
+        [
+            MenuChoice("a", "Assign with voice sample", "a"),
+            MenuChoice("n", "Assign only", "n"),
+            MenuChoice("c", "New known person with voice sample", "c"),
+            MenuChoice("u", "Mark unknown", "u"),
+            MenuChoice("s", "Skip", "s"),
+            MenuChoice("q", "Quit review", "q"),
+        ]
+    )
+    return _select_menu("Action", choices) or "q"
+
+
+def _select_speaker_review_follow_up_action() -> str:
+    choices = [
+        MenuChoice("a", "Refresh affected meetings", "a"),
+        MenuChoice("g", "Refresh speaker matching globally", "g"),
+        MenuChoice("n", "Do nothing", "n"),
+    ]
+    return _select_menu("Next", choices) or "n"
+
+
+def _select_menu(title: str, choices: list[MenuChoice]) -> str | None:
+    selected_index = 0
+    selected_value: str | None = None
+    key_bindings = KeyBindings()
+
+    def finish(value: str | None) -> None:
+        nonlocal selected_value
+        selected_value = value
+        application.exit()
+
+    def move(offset: int) -> None:
+        nonlocal selected_index
+        selected_index = (selected_index + offset) % len(choices)
+        application.invalidate()
+
+    @key_bindings.add("up")
+    def _up(_event) -> None:
+        move(-1)
+
+    @key_bindings.add("down")
+    def _down(_event) -> None:
+        move(1)
+
+    @key_bindings.add("enter")
+    def _enter(_event) -> None:
+        finish(choices[selected_index].value)
+
+    @key_bindings.add("escape")
+    @key_bindings.add("c-c")
+    def _cancel(_event) -> None:
+        finish(None)
+
+    bound_shortcuts: set[str] = set()
+    for choice in choices:
+        if choice.shortcut is None or choice.shortcut in bound_shortcuts:
+            continue
+        bound_shortcuts.add(choice.shortcut)
+        key_bindings.add(choice.shortcut)(lambda _event, value=choice.value: finish(value))
+
+    def render_menu():
+        lines = [("class:title", f"{title}\n")]
+        for index, choice in enumerate(choices):
+            prefix = "›" if index == selected_index else " "
+            style = "class:selected" if index == selected_index else ""
+            shortcut = f"[{choice.shortcut}] " if choice.shortcut is not None else ""
+            lines.append((style, f"{prefix} {shortcut}{choice.label}\n"))
+        lines.append(("class:help", "\nUse arrows, Enter, shortcut key, or Esc to cancel."))
+        return lines
+
+    control = FormattedTextControl(render_menu, focusable=True)
+    application = Application(
+        layout=Layout(HSplit([Window(content=control, always_hide_cursor=True)])),
+        key_bindings=key_bindings,
+        full_screen=False,
+        style=None,
+    )
+    try:
+        application.run()
+    except (KeyboardInterrupt, EOFError):
+        return None
+    return selected_value
 
 
 @secrets_app.command("status")
