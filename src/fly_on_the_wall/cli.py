@@ -20,6 +20,7 @@ from fly_on_the_wall.meetings import (
     import_meeting,
     list_meetings,
     meeting_stage_status,
+    rename_meeting,
 )
 from fly_on_the_wall.people import Person, create_person, get_person, list_people
 from fly_on_the_wall.processing import process_audio, refresh_meeting
@@ -123,7 +124,9 @@ def doctor() -> None:
 @app.command("import")
 def import_audio(
     audio_path: Annotated[Path, typer.Argument(exists=True, file_okay=True, dir_okay=False)],
-    title: Annotated[str, typer.Option("--title", "-t", help="Meeting title.")],
+    title: Annotated[
+        str | None, typer.Option("--title", "-t", help="Manual meeting title override.")
+    ] = None,
     description: Annotated[
         str | None, typer.Option("--description", "-d", help="Meeting context.")
     ] = None,
@@ -134,15 +137,18 @@ def import_audio(
         meeting = import_meeting(connection, audio_path, title, config, description=description)
 
     console.print(f"Imported meeting {meeting.slug}")
+    console.print(f"Title: {meeting.title}")
     console.print(f"ID: {meeting.id}")
     console.print(f"Audio: {meeting.imported_audio_path}")
-    console.print(f"Next: fot process {audio_path} --title \"{title}\"")
+    console.print(f"Next: fot process {audio_path}")
 
 
 @app.command()
 def process(
     audio_path: Annotated[Path, typer.Argument(exists=True, file_okay=True, dir_okay=False)],
-    title: Annotated[str, typer.Option("--title", "-t", help="Meeting title.")],
+    title: Annotated[
+        str | None, typer.Option("--title", "-t", help="Manual meeting title override.")
+    ] = None,
     description: Annotated[
         str | None, typer.Option("--description", "-d", help="Meeting context.")
     ] = None,
@@ -294,14 +300,20 @@ def meetings_list() -> None:
     with database() as connection:
         meetings = list_meetings(connection)
     if not meetings:
-        console.print("No meetings found. Import one with: fot import <audio> --title \"Title\"")
+        console.print("No meetings found. Import one with: fot import <audio>")
         return
     table = Table(title="Meetings")
     table.add_column("Slug")
     table.add_column("Title")
+    table.add_column("Title Source")
     table.add_column("Language")
     for meeting in meetings:
-        table.add_row(meeting["slug"], meeting["title"], meeting["language"])
+        table.add_row(
+            meeting["slug"],
+            meeting["title"],
+            meeting.get("title_source", "manual"),
+            meeting["language"],
+        )
     console.print(table)
 
 
@@ -314,8 +326,24 @@ def meetings_show(meeting: str) -> None:
         console.print(f"Meeting not found: {meeting}")
         raise typer.Exit(code=1)
     console.print(f"Title: {found['title']}")
+    console.print(f"Title Source: {found.get('title_source', 'manual')}")
+    if found.get("generated_title"):
+        console.print(f"Generated Title: {found['generated_title']}")
     console.print(f"Slug: {found['slug']}")
     console.print(f"ID: {found['id']}")
+
+
+@meetings_app.command("rename")
+def meetings_rename(meeting: str, title: str) -> None:
+    """Manually rename a meeting title."""
+    with database() as connection:
+        try:
+            updated = rename_meeting(connection, meeting, title)
+        except ValueError as exc:
+            console.print(str(exc))
+            raise typer.Exit(code=1) from exc
+    console.print(f"Renamed meeting {updated['slug']}")
+    console.print(f"Title: {updated['title']}")
 
 
 @meetings_app.command("remove")

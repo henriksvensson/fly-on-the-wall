@@ -145,7 +145,7 @@ def scan_watch_folders(
                 result = process_fn(
                     connection,
                     audio_path,
-                    audio_path.stem,
+                    None,
                     config,
                     storage=storage,
                     progress=progress,

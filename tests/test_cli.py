@@ -40,6 +40,13 @@ def test_meetings_remove_command_exists() -> None:
     assert "Completely remove a meeting" in result.stdout
 
 
+def test_meetings_rename_command_exists() -> None:
+    result = runner.invoke(app, ["meetings", "rename", "--help"])
+
+    assert result.exit_code == 0
+    assert "Manually rename a meeting" in result.stdout
+
+
 def test_speakers_group_exists() -> None:
     result = runner.invoke(app, ["speakers", "--help"])
 

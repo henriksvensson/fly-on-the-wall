@@ -65,7 +65,7 @@ def test_scan_processes_stable_audio_file(tmp_path: Path) -> None:
     assert result.seen == 1
     assert result.processed == 1
     assert calls[0][0] == audio_path
-    assert calls[0][1] == "Team Sync"
+    assert calls[0][1] is None
     assert item["status"] == "done"
     assert item["meeting_id"] == "meeting-1"
     assert item["file_sha256"] == file_sha256(audio_path)

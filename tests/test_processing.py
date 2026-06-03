@@ -431,3 +431,118 @@ def test_refresh_meeting_reexports_without_transcription(tmp_path: Path) -> None
     assert refreshed.provider_run_id == "run-1"
     assert refreshed.export.transcript_path != processed.export.transcript_path
     assert "**Person B:** Hej" in refreshed.export.transcript_path.read_text()
+
+
+def test_process_audio_applies_generated_title_for_filename_title(
+    tmp_path: Path, monkeypatch
+) -> None:
+    audio_path = tmp_path / "260603_100000.m4a"
+    audio_path.write_bytes(b"audio")
+    storage = ensure_storage_layout(tmp_path / "storage")
+
+    def fake_transcribe(
+        connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
+    ) -> str:
+        raw_path = storage.artifacts / meeting_id / "raw.json"
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        raw_path.write_text(
+            json.dumps(
+                {
+                    "language_code": "sv",
+                    "words": [
+                        {"speaker_id": "speaker_0", "text": "Example term", "start": 0, "end": 0.2}
+                    ],
+                }
+            )
+        )
+        connection.execute(
+            """
+            INSERT INTO provider_runs(id, meeting_id, provider, model, raw_response_path, status)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("run-1", meeting_id, "elevenlabs", "scribe_v2", str(raw_path), "done"),
+        )
+        return "run-1"
+
+    monkeypatch.setattr("fly_on_the_wall.processing.get_api_key", lambda provider: "test-key")
+    monkeypatch.setattr(
+        "fly_on_the_wall.processing.analyze_meeting",
+        lambda *args, **kwargs: "# Meeting Analysis\n\n## Summary\n\nRecruitment planning.",
+    )
+    monkeypatch.setattr(
+        "fly_on_the_wall.processing.suggest_meeting_title",
+        lambda *args, **kwargs: "Recruitment Planning",
+    )
+
+    with database(tmp_path / "fly.db") as connection:
+        result = process_audio(
+            connection,
+            audio_path,
+            None,
+            AppConfig(cleanup_mode="deterministic"),
+            storage,
+            transcribe_fn=fake_transcribe,
+        )
+        row = connection.execute(
+            "SELECT * FROM meetings WHERE id = ?", (result.meeting.id,)
+        ).fetchone()
+
+    assert result.meeting.title == "Recruitment Planning"
+    assert result.meeting.title_source == "generated"
+    assert row["generated_title"] == "Recruitment Planning"
+    assert "# Recruitment Planning" in result.export.transcript_path.read_text()
+
+
+def test_process_audio_keeps_manual_title_override(tmp_path: Path, monkeypatch) -> None:
+    audio_path = tmp_path / "recording.m4a"
+    audio_path.write_bytes(b"audio")
+    storage = ensure_storage_layout(tmp_path / "storage")
+    title_calls = 0
+
+    def fake_transcribe(
+        connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
+    ) -> str:
+        raw_path = storage.artifacts / meeting_id / "raw.json"
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        raw_path.write_text(
+            json.dumps(
+                {
+                    "language_code": "sv",
+                    "words": [{"speaker_id": "speaker_0", "text": "Hej", "start": 0, "end": 0.2}],
+                }
+            )
+        )
+        connection.execute(
+            """
+            INSERT INTO provider_runs(id, meeting_id, provider, model, raw_response_path, status)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("run-1", meeting_id, "elevenlabs", "scribe_v2", str(raw_path), "done"),
+        )
+        return "run-1"
+
+    def fake_title(*args, **kwargs) -> str:
+        nonlocal title_calls
+        title_calls += 1
+        return "Generated Title"
+
+    monkeypatch.setattr("fly_on_the_wall.processing.get_api_key", lambda provider: "test-key")
+    monkeypatch.setattr(
+        "fly_on_the_wall.processing.analyze_meeting",
+        lambda *args, **kwargs: "# Meeting Analysis\n\n## Summary\n\nAnalyzed.",
+    )
+    monkeypatch.setattr("fly_on_the_wall.processing.suggest_meeting_title", fake_title)
+
+    with database(tmp_path / "fly.db") as connection:
+        result = process_audio(
+            connection,
+            audio_path,
+            "Manual Title",
+            AppConfig(cleanup_mode="deterministic"),
+            storage,
+            transcribe_fn=fake_transcribe,
+        )
+
+    assert result.meeting.title == "Manual Title"
+    assert result.meeting.title_source == "manual"
+    assert title_calls == 0

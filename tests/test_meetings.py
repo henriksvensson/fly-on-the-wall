@@ -7,7 +7,9 @@ from fly_on_the_wall.meetings import (
     file_sha256,
     import_meeting,
     latest_completed_provider_run,
+    rename_meeting,
     slugify,
+    update_generated_title,
 )
 from fly_on_the_wall.storage import ensure_storage_layout
 
@@ -36,9 +38,67 @@ def test_import_meeting_copies_audio_and_creates_record(tmp_path: Path) -> None:
     assert meeting.slug == "intro-call-with-person_b"
     assert meeting.imported_audio_path.read_bytes() == b"fake audio"
     assert row["title"] == "Intro Call With Person B"
+    assert row["title_source"] == "manual"
     assert row["description"] == "First call"
     assert row["language"] == "sv"
     assert row["audio_sha256"] == file_sha256(audio_path)
+
+
+def test_import_meeting_uses_filename_as_provisional_title(tmp_path: Path) -> None:
+    audio_path = tmp_path / "Weekly Planning.m4a"
+    audio_path.write_bytes(b"fake audio")
+    storage = ensure_storage_layout(tmp_path / "storage")
+
+    with database(tmp_path / "fly.db") as connection:
+        meeting = import_meeting(connection, audio_path, None, AppConfig(), storage)
+        row = connection.execute("SELECT * FROM meetings WHERE id = ?", (meeting.id,)).fetchone()
+
+    assert meeting.title == "Weekly Planning"
+    assert meeting.title_source == "filename"
+    assert row["title_source"] == "filename"
+
+
+def test_generated_title_replaces_filename_title_only(tmp_path: Path) -> None:
+    filename_audio = tmp_path / "recording.m4a"
+    filename_audio.write_bytes(b"filename audio")
+    manual_audio = tmp_path / "manual.m4a"
+    manual_audio.write_bytes(b"manual audio")
+    storage = ensure_storage_layout(tmp_path / "storage")
+
+    with database(tmp_path / "fly.db") as connection:
+        filename_meeting = import_meeting(connection, filename_audio, None, AppConfig(), storage)
+        manual_meeting = import_meeting(
+            connection, manual_audio, "Manual Title", AppConfig(), storage
+        )
+        update_generated_title(connection, filename_meeting.id, "Recruitment Planning")
+        update_generated_title(connection, manual_meeting.id, "Generated Suggestion")
+        filename_row = connection.execute(
+            "SELECT * FROM meetings WHERE id = ?", (filename_meeting.id,)
+        ).fetchone()
+        manual_row = connection.execute(
+            "SELECT * FROM meetings WHERE id = ?", (manual_meeting.id,)
+        ).fetchone()
+
+    assert filename_row["title"] == "Recruitment Planning"
+    assert filename_row["title_source"] == "generated"
+    assert filename_row["generated_title"] == "Recruitment Planning"
+    assert manual_row["title"] == "Manual Title"
+    assert manual_row["title_source"] == "manual"
+    assert manual_row["generated_title"] == "Generated Suggestion"
+
+
+def test_rename_meeting_sets_manual_title_override(tmp_path: Path) -> None:
+    audio_path = tmp_path / "recording.m4a"
+    audio_path.write_bytes(b"fake audio")
+    storage = ensure_storage_layout(tmp_path / "storage")
+
+    with database(tmp_path / "fly.db") as connection:
+        meeting = import_meeting(connection, audio_path, None, AppConfig(), storage)
+        update_generated_title(connection, meeting.id, "Generated Title")
+        updated = rename_meeting(connection, meeting.slug, "Manual Rename")
+
+    assert updated["title"] == "Manual Rename"
+    assert updated["title_source"] == "manual"
 
 
 def test_import_meeting_generates_unique_slug(tmp_path: Path) -> None:

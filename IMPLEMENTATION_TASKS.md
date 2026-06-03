@@ -84,6 +84,11 @@
 - [x] **Polish CLI output**
     Improve progress messages, errors, and next-step hints for normal daily use.
 
-- [ ] **Infer meeting title from transcript**
+- [x] **Infer meeting title from transcript**
     Use the final cleaned transcript, likely during or after analysis, to suggest or assign a
     content-based meeting title so users do not have to provide one up front.
+
+- [ ] **Detect empty or nonsense recordings**
+    Identify accidentally uploaded audio files that produce no meaningful transcript, such as
+    very short/silent files or transcripts with little usable content, and mark them as ignored
+    or failed without creating a normal meeting export.

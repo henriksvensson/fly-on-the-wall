@@ -17,9 +17,11 @@ class Meeting:
     id: str
     slug: str
     title: str
+    title_source: str
     language: str
     imported_audio_path: Path
     audio_sha256: str | None = None
+    generated_title: str | None = None
 
 
 @dataclass(frozen=True)
@@ -32,7 +34,7 @@ class DeleteMeetingResult:
 def import_meeting(
     connection: Connection,
     audio_path: Path,
-    title: str,
+    title: str | None,
     config: AppConfig,
     storage: StoragePaths | None = None,
     description: str | None = None,
@@ -47,7 +49,9 @@ def import_meeting(
 
     paths = storage or ensure_storage_layout()
     meeting_id = str(uuid4())
-    slug = unique_slug(connection, slugify(title))
+    provisional_title = title or audio_path.stem
+    title_source = "manual" if title else "filename"
+    slug = unique_slug(connection, slugify(provisional_title))
     imported_audio_path = paths.audio / slug / audio_path.name
     imported_audio_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(audio_path, imported_audio_path)
@@ -59,17 +63,19 @@ def import_meeting(
                 id,
                 slug,
                 title,
+                title_source,
                 description,
                 language,
                 original_audio_path,
                 imported_audio_path,
                 audio_sha256
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 meeting_id,
                 slug,
-                title,
+                provisional_title,
+                title_source,
                 description,
                 config.language,
                 str(audio_path),
@@ -81,7 +87,8 @@ def import_meeting(
     return Meeting(
         id=meeting_id,
         slug=slug,
-        title=title,
+        title=provisional_title,
+        title_source=title_source,
         language=config.language,
         imported_audio_path=imported_audio_path,
         audio_sha256=audio_sha256,
@@ -119,7 +126,11 @@ def list_meetings(connection: Connection) -> list[dict]:
     return [
         dict(row)
         for row in connection.execute(
-            "SELECT id, slug, title, language, created_at FROM meetings ORDER BY created_at DESC"
+            """
+            SELECT id, slug, title, title_source, generated_title, language, created_at
+            FROM meetings
+            ORDER BY created_at DESC
+            """
         ).fetchall()
     ]
 
@@ -157,14 +168,73 @@ def latest_completed_provider_run(
     return None if row is None else dict(row)
 
 
+def update_generated_title(connection: Connection, meeting_id: str, generated_title: str) -> None:
+    normalized_title = generated_title.strip()
+    if not normalized_title:
+        return
+
+    with connection:
+        row = connection.execute(
+            "SELECT title_source FROM meetings WHERE id = ?", (meeting_id,)
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"Meeting not found: {meeting_id}")
+
+        if row["title_source"] == "manual":
+            connection.execute(
+                """
+                UPDATE meetings
+                SET generated_title = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (normalized_title, meeting_id),
+            )
+        else:
+            connection.execute(
+                """
+                UPDATE meetings
+                SET title = ?, title_source = 'generated', generated_title = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (normalized_title, normalized_title, meeting_id),
+            )
+
+
+def rename_meeting(connection: Connection, meeting_id_or_slug: str, title: str) -> dict:
+    meeting = get_meeting(connection, meeting_id_or_slug)
+    if meeting is None:
+        raise ValueError(f"Meeting not found: {meeting_id_or_slug}")
+
+    normalized_title = title.strip()
+    if not normalized_title:
+        raise ValueError("Meeting title cannot be empty.")
+
+    with connection:
+        connection.execute(
+            """
+            UPDATE meetings
+            SET title = ?, title_source = 'manual', updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (normalized_title, meeting["id"]),
+        )
+    updated = get_meeting(connection, meeting["id"])
+    if updated is None:
+        raise ValueError(f"Meeting not found: {meeting_id_or_slug}")
+    return updated
+
+
 def _meeting_from_row(row: dict) -> Meeting:
     return Meeting(
         id=row["id"],
         slug=row["slug"],
         title=row["title"],
+        title_source=row.get("title_source", "manual"),
         language=row["language"],
         imported_audio_path=Path(row["imported_audio_path"]),
         audio_sha256=row.get("audio_sha256"),
+        generated_title=row.get("generated_title"),
     )
 
 

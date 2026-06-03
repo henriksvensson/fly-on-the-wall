@@ -16,6 +16,7 @@ from fly_on_the_wall.meetings import (
     get_meeting,
     import_meeting,
     latest_completed_provider_run,
+    update_generated_title,
 )
 from fly_on_the_wall.normalization import normalize_provider_run
 from fly_on_the_wall.providers.elevenlabs import run_transcription
@@ -24,6 +25,7 @@ from fly_on_the_wall.providers.openai_analysis import (
     OpenAIAnalysisError,
     analyze_meeting,
     fallback_analysis,
+    suggest_meeting_title,
 )
 from fly_on_the_wall.providers.openai_cleanup import (
     CLEANUP_PROMPT_VERSION,
@@ -52,7 +54,7 @@ class ProcessResult:
 def process_audio(
     connection: Connection,
     audio_path: Path,
-    title: str,
+    title: str | None,
     config: AppConfig,
     storage: StoragePaths | None = None,
     description: str | None = None,
@@ -84,7 +86,7 @@ def process_audio(
         progress,
     )
     _report(progress, "Done")
-    return ProcessResult(meeting, provider_run_id, export)
+    return ProcessResult(_meeting_from_database(connection, meeting.id), provider_run_id, export)
 
 
 def refresh_meeting(
@@ -108,9 +110,11 @@ def refresh_meeting(
         id=meeting_row["id"],
         slug=meeting_row["slug"],
         title=meeting_row["title"],
+        title_source=meeting_row.get("title_source", "manual"),
         language=meeting_row["language"],
         imported_audio_path=Path(meeting_row["imported_audio_path"]),
         audio_sha256=meeting_row.get("audio_sha256"),
+        generated_title=meeting_row.get("generated_title"),
     )
     _report(progress, f"Refreshing meeting {meeting.slug}")
     export = _refresh_provider_run(
@@ -124,7 +128,7 @@ def refresh_meeting(
         progress,
     )
     _report(progress, "Done")
-    return ProcessResult(meeting, provider_run["id"], export)
+    return ProcessResult(_meeting_from_database(connection, meeting.id), provider_run["id"], export)
 
 
 def _refresh_provider_run(
@@ -181,16 +185,79 @@ def _refresh_provider_run(
                 _report(progress, f"OpenAI cleanup failed; exporting deterministic cleanup ({exc})")
 
     analysis = _analyze_transcript(paths, meeting.id, cleaned_transcript, description, progress)
+    _suggest_and_apply_title(
+        connection, paths, meeting.id, cleaned_transcript, analysis, description, progress
+    )
 
     _report(progress, "Exporting markdown")
     export = export_markdown_transcript(connection, meeting.id, cleaned_transcript, analysis, paths)
     return export
 
 
+def _suggest_and_apply_title(
+    connection: Connection,
+    storage: StoragePaths,
+    meeting_id: str,
+    transcript: str,
+    analysis: str,
+    description: str | None,
+    progress: ProgressFn | None,
+) -> None:
+    if not get_api_key("openai"):
+        return
+
+    meeting = get_meeting(connection, meeting_id)
+    if meeting is None:
+        raise ValueError(f"Meeting not found: {meeting_id}")
+
+    if meeting.get("title_source") == "manual":
+        return
+
+    title_cache_key = text_sha256(
+        "\n".join([DEFAULT_ANALYSIS_MODEL, description or "", transcript, analysis])
+    )
+    title_cache_dir = storage.artifacts / meeting_id / "generated-title"
+    cached_title = read_cached_text(title_cache_dir, title_cache_key)
+    if cached_title is not None:
+        _report(progress, "Reusing generated meeting title")
+        generated_title = cached_title
+    else:
+        _report(progress, "Generating meeting title")
+        try:
+            generated_title = suggest_meeting_title(
+                transcript,
+                analysis,
+                meeting_context=description,
+            )
+        except OpenAIAnalysisError as exc:
+            _report(progress, f"Meeting title generation failed ({exc})")
+            return
+        write_cached_text(title_cache_dir, title_cache_key, generated_title)
+
+    if generated_title.strip():
+        update_generated_title(connection, meeting_id, generated_title)
+
+
 def _run_elevenlabs_transcription(
     connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
 ) -> str:
     return run_transcription(connection, meeting_id, audio_path, storage)
+
+
+def _meeting_from_database(connection: Connection, meeting_id: str) -> Meeting:
+    row = get_meeting(connection, meeting_id)
+    if row is None:
+        raise ValueError(f"Meeting not found: {meeting_id}")
+    return Meeting(
+        id=row["id"],
+        slug=row["slug"],
+        title=row["title"],
+        title_source=row.get("title_source", "manual"),
+        language=row["language"],
+        imported_audio_path=Path(row["imported_audio_path"]),
+        audio_sha256=row.get("audio_sha256"),
+        generated_title=row.get("generated_title"),
+    )
 
 
 def _report(progress: ProgressFn | None, message: str) -> None:
