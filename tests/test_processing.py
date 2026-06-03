@@ -127,11 +127,15 @@ def test_process_audio_reuses_existing_meeting_and_provider_run(tmp_path: Path) 
     assert meeting_count == 1
 
 
-def test_process_audio_reports_progress(tmp_path: Path) -> None:
+def test_process_audio_reports_progress(tmp_path: Path, monkeypatch) -> None:
     audio_path = tmp_path / "meeting.m4a"
     audio_path.write_bytes(b"audio")
     storage = ensure_storage_layout(tmp_path / "storage")
     progress_messages: list[str] = []
+    monkeypatch.setattr(
+        "fly_on_the_wall.audio_metadata.probe_metadata",
+        lambda path: {"streams": [], "format": {"duration": "12.5", "size": "100"}},
+    )
 
     def fake_transcribe(
         connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
@@ -168,16 +172,16 @@ def test_process_audio_reports_progress(tmp_path: Path) -> None:
             progress=progress_messages.append,
         )
 
-    assert progress_messages == [
-        "Importing audio",
-        "Transcribing audio with ElevenLabs",
-        "Normalizing transcript",
-        "Matching speaker identities",
-        "Rendering named transcript",
-        "Running deterministic cleanup",
-        "Exporting markdown",
-        "Done",
-    ]
+    assert "Importing audio" in progress_messages
+    assert any(message.startswith("Importing audio completed in ") for message in progress_messages)
+    assert "Audio duration: 12s" in progress_messages
+    assert "Transcribing audio with ElevenLabs" in progress_messages
+    assert any(
+        message.startswith("Transcribing audio with ElevenLabs completed in ")
+        for message in progress_messages
+    )
+    assert "Exporting markdown" in progress_messages
+    assert any(message.startswith("Done (") for message in progress_messages)
 
 
 def test_process_audio_exports_when_openai_cleanup_fails(tmp_path: Path, monkeypatch) -> None:

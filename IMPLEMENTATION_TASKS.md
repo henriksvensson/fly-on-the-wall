@@ -92,3 +92,11 @@
     Identify accidentally uploaded audio files that produce no meaningful transcript, such as
     very short/silent files or transcripts with little usable content, and mark them as ignored
     or failed without creating a normal meeting export.
+
+- [ ] **Track external service costs**
+    Record provider usage, estimated pricing inputs, and calculated costs for external services
+    such as transcription and LLM cleanup/analysis so users can inspect spending over time.
+
+- [ ] **Improve language-aware analysis**
+    Detect or preserve the meeting language when generating cleanup, titles, summaries, and
+    analysis so Swedish meetings can produce Swedish notes instead of defaulting to English.

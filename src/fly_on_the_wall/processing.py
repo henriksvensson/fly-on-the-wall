@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -70,24 +71,26 @@ def process_audio(
     progress: ProgressFn | None = None,
 ) -> ProcessResult:
     paths = storage or ensure_storage_layout()
-    _report(progress, "Importing audio")
-    meeting = import_meeting(connection, audio_path, title, config, paths, description)
+    timed_progress = TimedProgress(progress)
+    with timed_progress.step("Importing audio"):
+        meeting = import_meeting(connection, audio_path, title, config, paths, description)
+    timed_progress.message(f"Audio duration: {_audio_duration_label(connection, meeting.id)}")
     pre_quality = assess_before_transcription(connection, meeting)
     if pre_quality is not None:
         store_recording_quality(connection, meeting.id, pre_quality)
         if pre_quality.status in {"empty", "nonsense"}:
-            _report(progress, f"Ignoring recording ({pre_quality.reason})")
+            timed_progress.message(f"Ignoring recording ({pre_quality.reason})")
             raise RecordingIgnoredError(meeting, pre_quality)
 
     existing_provider_run = latest_completed_provider_run(connection, meeting.id)
     if existing_provider_run is None:
-        _report(progress, "Transcribing audio with ElevenLabs")
-        resolved_transcribe = transcribe_fn or _run_elevenlabs_transcription
-        provider_run_id = resolved_transcribe(
-            connection, meeting.id, meeting.imported_audio_path, paths
-        )
+        with timed_progress.step("Transcribing audio with ElevenLabs"):
+            resolved_transcribe = transcribe_fn or _run_elevenlabs_transcription
+            provider_run_id = resolved_transcribe(
+                connection, meeting.id, meeting.imported_audio_path, paths
+            )
     else:
-        _report(progress, "Reusing completed ElevenLabs transcription")
+        timed_progress.message("Reusing completed ElevenLabs transcription")
         provider_run_id = existing_provider_run["id"]
     export = _refresh_provider_run(
         connection,
@@ -97,9 +100,9 @@ def process_audio(
         paths,
         description,
         embedding_backend,
-        progress,
+        timed_progress,
     )
-    _report(progress, "Done")
+    timed_progress.message(f"Done ({timed_progress.total_elapsed()})")
     return ProcessResult(_meeting_from_database(connection, meeting.id), provider_run_id, export)
 
 
@@ -130,7 +133,8 @@ def refresh_meeting(
         audio_sha256=meeting_row.get("audio_sha256"),
         generated_title=meeting_row.get("generated_title"),
     )
-    _report(progress, f"Refreshing meeting {meeting.slug}")
+    timed_progress = TimedProgress(progress)
+    timed_progress.message(f"Refreshing meeting {meeting.slug}")
     export = _refresh_provider_run(
         connection,
         meeting,
@@ -139,9 +143,9 @@ def refresh_meeting(
         paths,
         meeting_row.get("description"),
         embedding_backend,
-        progress,
+        timed_progress,
     )
-    _report(progress, "Done")
+    timed_progress.message(f"Done ({timed_progress.total_elapsed()})")
     return ProcessResult(_meeting_from_database(connection, meeting.id), provider_run["id"], export)
 
 
@@ -153,25 +157,25 @@ def _refresh_provider_run(
     paths: StoragePaths,
     description: str | None,
     embedding_backend: EmbeddingBackend | None,
-    progress: ProgressFn | None,
+    progress: TimedProgress,
 ) -> ExportResult:
-    _report(progress, "Normalizing transcript")
-    segments = normalize_provider_run(connection, provider_run_id)
+    with progress.step("Normalizing transcript"):
+        segments = normalize_provider_run(connection, provider_run_id)
     quality = assess_after_transcription(connection, meeting, segments)
     store_recording_quality(connection, meeting.id, quality)
     if quality.status in {"empty", "nonsense"}:
-        _report(progress, f"Ignoring recording ({quality.reason})")
+        progress.message(f"Ignoring recording ({quality.reason})")
         raise RecordingIgnoredError(meeting, quality)
 
-    _report(progress, "Matching speaker identities")
-    try:
-        match_provider_run_speakers(connection, provider_run_id, embedding_backend, paths)
-    except RuntimeError as exc:
-        _report(progress, f"Speaker identity matching skipped ({exc})")
-    _report(progress, "Rendering named transcript")
-    named_transcript = render_named_transcript(connection, provider_run_id, storage=paths)
-    _report(progress, "Running deterministic cleanup")
-    deterministic_transcript = deterministic_cleanup(named_transcript)
+    with progress.step("Matching speaker identities"):
+        try:
+            match_provider_run_speakers(connection, provider_run_id, embedding_backend, paths)
+        except RuntimeError as exc:
+            progress.message(f"Speaker identity matching skipped ({exc})")
+    with progress.step("Rendering named transcript"):
+        named_transcript = render_named_transcript(connection, provider_run_id, storage=paths)
+    with progress.step("Running deterministic cleanup"):
+        deterministic_transcript = deterministic_cleanup(named_transcript)
     cleaned_transcript = deterministic_transcript
 
     if config.cleanup_mode == "light" and get_api_key("openai"):
@@ -190,41 +194,45 @@ def _refresh_provider_run(
         cleanup_cache_dir = paths.artifacts / meeting.id / "llm-cleanup"
         cached_cleanup = read_cached_text(cleanup_cache_dir, cleanup_cache_key)
         if cached_cleanup is not None:
-            _report(progress, "Reusing OpenAI light cleanup")
+            progress.message("Reusing OpenAI light cleanup")
             cleaned_transcript = cached_cleanup
         else:
-            _report(progress, "Running OpenAI light cleanup")
-            try:
-                cleaned_transcript = cleanup_transcript(
-                    deterministic_transcript,
-                    glossary_terms=glossary_terms,
-                    meeting_context=description,
-                )
-                write_cached_text(cleanup_cache_dir, cleanup_cache_key, cleaned_transcript)
-            except OpenAICleanupError as exc:
-                _report(progress, f"OpenAI cleanup failed; exporting deterministic cleanup ({exc})")
+            with progress.step("Running OpenAI light cleanup"):
+                try:
+                    cleaned_transcript = cleanup_transcript(
+                        deterministic_transcript,
+                        glossary_terms=glossary_terms,
+                        meeting_context=description,
+                    )
+                    write_cached_text(cleanup_cache_dir, cleanup_cache_key, cleaned_transcript)
+                except OpenAICleanupError as exc:
+                    progress.message(
+                        f"OpenAI cleanup failed; exporting deterministic cleanup ({exc})"
+                    )
 
     analysis = _analyze_transcript(paths, meeting.id, cleaned_transcript, description, progress)
     _suggest_and_apply_title(
         connection, paths, meeting.id, cleaned_transcript, analysis, description, progress
     )
 
-    _report(progress, "Exporting markdown")
-    export = export_markdown_transcript(connection, meeting.id, cleaned_transcript, analysis, paths)
+    with progress.step("Exporting markdown"):
+        export = export_markdown_transcript(
+            connection, meeting.id, cleaned_transcript, analysis, paths
+        )
     _publish_enabled_targets(connection, meeting.id, progress)
     return export
 
 
 def _publish_enabled_targets(
-    connection: Connection, meeting_id: str, progress: ProgressFn | None
+    connection: Connection, meeting_id: str, progress: TimedProgress
 ) -> None:
     try:
         published = publish_enabled_targets(connection, meeting_id)
     except ValueError as exc:
-        _report(progress, f"Publishing skipped ({exc})")
+        progress.message(f"Publishing skipped ({exc})")
         return
     for result in published:
-        _report(progress, f"Published to {result.target.name}: {result.output_path}")
+        progress.message(f"Published to {result.target.name}: {result.output_path}")
 
 
 def _suggest_and_apply_title(
@@ -234,7 +242,7 @@ def _suggest_and_apply_title(
     transcript: str,
     analysis: str,
     description: str | None,
-    progress: ProgressFn | None,
+    progress: TimedProgress,
 ) -> None:
     if not get_api_key("openai"):
         return
@@ -252,20 +260,20 @@ def _suggest_and_apply_title(
     title_cache_dir = storage.artifacts / meeting_id / "generated-title"
     cached_title = read_cached_text(title_cache_dir, title_cache_key)
     if cached_title is not None:
-        _report(progress, "Reusing generated meeting title")
+        progress.message("Reusing generated meeting title")
         generated_title = cached_title
     else:
-        _report(progress, "Generating meeting title")
-        try:
-            generated_title = suggest_meeting_title(
-                transcript,
-                analysis,
-                meeting_context=description,
-            )
-        except OpenAIAnalysisError as exc:
-            _report(progress, f"Meeting title generation failed ({exc})")
-            return
-        write_cached_text(title_cache_dir, title_cache_key, generated_title)
+        with progress.step("Generating meeting title"):
+            try:
+                generated_title = suggest_meeting_title(
+                    transcript,
+                    analysis,
+                    meeting_context=description,
+                )
+            except OpenAIAnalysisError as exc:
+                progress.message(f"Meeting title generation failed ({exc})")
+                return
+            write_cached_text(title_cache_dir, title_cache_key, generated_title)
 
     if generated_title.strip():
         update_generated_title(connection, meeting_id, generated_title)
@@ -298,12 +306,76 @@ def _report(progress: ProgressFn | None, message: str) -> None:
         progress(message)
 
 
+class TimedProgress:
+    def __init__(self, progress: ProgressFn | None) -> None:
+        self.progress = progress
+        self.started_at = time.monotonic()
+
+    def message(self, message: str) -> None:
+        _report(self.progress, message)
+
+    def step(self, label: str) -> TimedStep:
+        return TimedStep(self, label)
+
+    def total_elapsed(self) -> str:
+        return _format_elapsed(time.monotonic() - self.started_at)
+
+
+class TimedStep:
+    def __init__(self, progress: TimedProgress, label: str) -> None:
+        self.progress = progress
+        self.label = label
+        self.started_at = 0.0
+
+    def __enter__(self) -> None:
+        self.started_at = time.monotonic()
+        self.progress.message(self.label)
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        elapsed = _format_elapsed(time.monotonic() - self.started_at)
+        self.progress.message(f"{self.label} completed in {elapsed}")
+
+
+def _audio_duration_label(connection: Connection, meeting_id: str) -> str:
+    duration = _audio_duration_from_metadata(connection, meeting_id)
+    if duration is None:
+        return "Unknown"
+    return _format_duration(duration)
+
+
+def _audio_duration_from_metadata(connection: Connection, meeting_id: str) -> float | None:
+    row = connection.execute(
+        "SELECT duration_seconds FROM audio_metadata WHERE meeting_id = ?",
+        (meeting_id,),
+    ).fetchone()
+    if row is None or row["duration_seconds"] is None:
+        return None
+    return float(row["duration_seconds"])
+
+
+def _format_duration(seconds: float) -> str:
+    total_seconds = int(seconds)
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours}h {minutes}m {seconds}s"
+    if minutes:
+        return f"{minutes}m {seconds}s"
+    return f"{seconds}s"
+
+
+def _format_elapsed(seconds: float) -> str:
+    if seconds < 1:
+        return f"{seconds:.2f}s"
+    return _format_duration(seconds)
+
+
 def _analyze_transcript(
     storage: StoragePaths,
     meeting_id: str,
     transcript: str,
     description: str | None,
-    progress: ProgressFn | None,
+    progress: TimedProgress,
 ) -> str:
     if not get_api_key("openai"):
         return fallback_analysis("OPENAI_API_KEY is missing")
@@ -314,15 +386,15 @@ def _analyze_transcript(
     analysis_cache_dir = storage.artifacts / meeting_id / "analysis"
     cached_analysis = read_cached_text(analysis_cache_dir, analysis_cache_key)
     if cached_analysis is not None:
-        _report(progress, "Reusing meeting analysis")
+        progress.message("Reusing meeting analysis")
         return cached_analysis
 
-    _report(progress, "Analyzing meeting")
-    try:
-        analysis = analyze_meeting(transcript, meeting_context=description)
-    except OpenAIAnalysisError as exc:
-        _report(progress, f"Meeting analysis failed; exporting fallback analysis ({exc})")
-        return fallback_analysis(str(exc))
+    with progress.step("Analyzing meeting"):
+        try:
+            analysis = analyze_meeting(transcript, meeting_context=description)
+        except OpenAIAnalysisError as exc:
+            progress.message(f"Meeting analysis failed; exporting fallback analysis ({exc})")
+            return fallback_analysis(str(exc))
 
     write_cached_text(analysis_cache_dir, analysis_cache_key, analysis)
     return analysis
