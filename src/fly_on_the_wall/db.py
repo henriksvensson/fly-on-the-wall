@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fly_on_the_wall.storage import ensure_storage_layout, storage_paths
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 13
 
 SCHEMA_STATEMENTS = (
     """
@@ -199,6 +199,18 @@ SCHEMA_STATEMENTS = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS recording_quality (
+        id TEXT PRIMARY KEY,
+        meeting_id TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        details_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS watch_folders (
         id TEXT PRIMARY KEY,
         name TEXT UNIQUE,
@@ -225,6 +237,33 @@ SCHEMA_STATEMENTS = (
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(folder_id) REFERENCES watch_folders(id) ON DELETE CASCADE,
         FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE SET NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS publish_targets (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        target_type TEXT NOT NULL,
+        path TEXT NOT NULL,
+        settings_json TEXT NOT NULL DEFAULT '{}',
+        auto_publish INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS published_items (
+        id TEXT PRIMARY KEY,
+        meeting_id TEXT NOT NULL,
+        target_id TEXT NOT NULL,
+        output_path TEXT NOT NULL,
+        content_sha256 TEXT NOT NULL,
+        published_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(meeting_id, target_id),
+        FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE,
+        FOREIGN KEY(target_id) REFERENCES publish_targets(id) ON DELETE CASCADE
     )
     """,
 )

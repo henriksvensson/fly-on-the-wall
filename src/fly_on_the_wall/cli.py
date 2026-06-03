@@ -25,11 +25,19 @@ from fly_on_the_wall.meetings import (
 )
 from fly_on_the_wall.people import Person, create_person, get_person, list_people
 from fly_on_the_wall.processing import process_audio, refresh_meeting
+from fly_on_the_wall.publishing import (
+    add_publish_target,
+    list_publish_targets,
+    publish_meeting,
+    remove_publish_target,
+    set_publish_target_enabled,
+)
 from fly_on_the_wall.reanalysis import (
     list_stale_stages,
     mark_speaker_reanalysis_stale,
     rerun_speaker_matching,
 )
+from fly_on_the_wall.recording_quality import RecordingIgnoredError
 from fly_on_the_wall.secrets import (
     SecretError,
     get_api_key_status,
@@ -70,6 +78,8 @@ reanalyze_app = typer.Typer(help="Mark and inspect stale analysis.", no_args_is_
 secrets_app = typer.Typer(help="Manage API keys in the OS keyring.", no_args_is_help=True)
 watch_app = typer.Typer(help="Process audio from watched folders.", no_args_is_help=True)
 watch_folders_app = typer.Typer(help="Manage watched folders.", no_args_is_help=True)
+publish_app = typer.Typer(help="Publish meetings to external targets.", no_args_is_help=True)
+publish_targets_app = typer.Typer(help="Manage publish targets.", no_args_is_help=True)
 app.add_typer(people_app, name="people")
 app.add_typer(meetings_app, name="meetings")
 app.add_typer(speakers_app, name="speakers")
@@ -77,6 +87,8 @@ app.add_typer(reanalyze_app, name="reanalyze")
 app.add_typer(secrets_app, name="secrets")
 app.add_typer(watch_app, name="watch")
 watch_app.add_typer(watch_folders_app, name="folders")
+app.add_typer(publish_app, name="publish")
+publish_app.add_typer(publish_targets_app, name="targets")
 console = Console()
 
 
@@ -157,14 +169,18 @@ def process(
     """Process audio from import through markdown export."""
     config = load_config()
     with database() as connection:
-        result = process_audio(
-            connection,
-            audio_path,
-            title,
-            config,
-            description=description,
-            progress=lambda message: console.print(f"-> {message}"),
-        )
+        try:
+            result = process_audio(
+                connection,
+                audio_path,
+                title,
+                config,
+                description=description,
+                progress=lambda message: console.print(f"-> {message}"),
+            )
+        except RecordingIgnoredError as exc:
+            console.print(f"Ignored recording {exc.meeting.slug}: {exc.quality.reason}")
+            return
 
     console.print(f"Processed meeting {result.meeting.slug}")
     console.print(f"Transcript: {result.export.transcript_path}")
@@ -311,6 +327,90 @@ def watch_folders_enable(identifier: str) -> None:
 def watch_folders_disable(identifier: str) -> None:
     """Disable a watched folder by id, name, or path."""
     _set_watch_folder_enabled_command(identifier, False)
+
+
+@publish_app.command("meeting")
+def publish_meeting_command(
+    meeting: str,
+    target: Annotated[str, typer.Option("--target", "-t", help="Publish target name or id.")],
+) -> None:
+    """Publish one meeting to a configured target."""
+    with database() as connection:
+        try:
+            result = publish_meeting(connection, meeting, target)
+        except ValueError as exc:
+            console.print(str(exc))
+            raise typer.Exit(code=1) from exc
+    console.print(f"Published {meeting} to {result.target.name}")
+    console.print(f"Output: {result.output_path}")
+
+
+@publish_targets_app.command("add")
+def publish_targets_add(
+    target_type: str,
+    path: Annotated[Path, typer.Argument(file_okay=False, dir_okay=True)],
+    name: Annotated[str, typer.Option("--name", "-n", help="Target name.")],
+    auto_publish: Annotated[
+        bool, typer.Option("--auto-publish", help="Publish processed meetings automatically.")
+    ] = False,
+) -> None:
+    """Add an external publish target."""
+    with database() as connection:
+        try:
+            target = add_publish_target(connection, target_type, path, name, auto_publish)
+        except Exception as exc:
+            console.print(str(exc))
+            raise typer.Exit(code=1) from exc
+    console.print(f"Added {target.target_type} publish target {target.name}")
+    console.print(f"Path: {target.path}")
+
+
+@publish_targets_app.command("list")
+def publish_targets_list() -> None:
+    """List publish targets."""
+    with database() as connection:
+        targets = list_publish_targets(connection)
+    if not targets:
+        console.print("No publish targets configured.")
+        return
+    table = Table(title="Publish Targets")
+    table.add_column("Name")
+    table.add_column("Type")
+    table.add_column("Auto")
+    table.add_column("Enabled")
+    table.add_column("Path")
+    for target in targets:
+        table.add_row(
+            target.name,
+            target.target_type,
+            "yes" if target.auto_publish else "no",
+            "yes" if target.enabled else "no",
+            str(target.path),
+        )
+    console.print(table)
+
+
+@publish_targets_app.command("remove")
+def publish_targets_remove(identifier: str) -> None:
+    """Remove a publish target by id or name."""
+    with database() as connection:
+        target = remove_publish_target(connection, identifier)
+    if target is None:
+        console.print(f"Publish target not found: {identifier}")
+        raise typer.Exit(code=1)
+    console.print(f"Removed publish target {target.name}")
+
+
+@publish_targets_app.command("enable")
+def publish_targets_enable(identifier: str) -> None:
+    """Enable a publish target by id or name."""
+    _set_publish_target_enabled_command(identifier, True)
+
+
+@publish_targets_app.command("disable")
+def publish_targets_disable(identifier: str) -> None:
+    """Disable a publish target by id or name."""
+    _set_publish_target_enabled_command(identifier, False)
 
 
 @meetings_app.command("list")
@@ -692,7 +792,8 @@ def _scan_watch_once(config, stable_age_seconds: int) -> None:
         )
     console.print(
         f"Watch scan complete: {result.processed} processed, "
-        f"{result.skipped} skipped, {result.failed} failed, {result.seen} seen."
+        f"{result.ignored} ignored, {result.skipped} skipped, "
+        f"{result.failed} failed, {result.seen} seen."
     )
 
 
@@ -704,6 +805,16 @@ def _set_watch_folder_enabled_command(identifier: str, enabled: bool) -> None:
         raise typer.Exit(code=1)
     state = "Enabled" if enabled else "Disabled"
     console.print(f"{state} watch folder {folder.path}")
+
+
+def _set_publish_target_enabled_command(identifier: str, enabled: bool) -> None:
+    with database() as connection:
+        target = set_publish_target_enabled(connection, identifier, enabled)
+    if target is None:
+        console.print(f"Publish target not found: {identifier}")
+        raise typer.Exit(code=1)
+    state = "Enabled" if enabled else "Disabled"
+    console.print(f"{state} publish target {target.name}")
 
 
 def _select_person(connection) -> Person | None:

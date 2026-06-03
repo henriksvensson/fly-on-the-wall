@@ -89,6 +89,27 @@ def test_watch_scan_command_exists() -> None:
     assert "Scan enabled watched folders" in result.stdout
 
 
+def test_publish_group_exists() -> None:
+    result = runner.invoke(app, ["publish", "--help"])
+
+    assert result.exit_code == 0
+    assert "Publish meetings to external targets" in result.stdout
+
+
+def test_publish_targets_group_exists() -> None:
+    result = runner.invoke(app, ["publish", "targets", "--help"])
+
+    assert result.exit_code == 0
+    assert "Manage publish targets" in result.stdout
+
+
+def test_publish_meeting_command_exists() -> None:
+    result = runner.invoke(app, ["publish", "meeting", "--help"])
+
+    assert result.exit_code == 0
+    assert "Publish one meeting" in result.stdout
+
+
 def test_watch_run_command_is_event_driven() -> None:
     result = runner.invoke(app, ["watch", "run", "--help"])
 

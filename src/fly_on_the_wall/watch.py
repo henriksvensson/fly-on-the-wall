@@ -10,6 +10,7 @@ from uuid import uuid4
 from fly_on_the_wall.config import AppConfig
 from fly_on_the_wall.meetings import file_sha256
 from fly_on_the_wall.processing import ProcessResult, process_audio
+from fly_on_the_wall.recording_quality import RecordingIgnoredError
 from fly_on_the_wall.storage import StoragePaths
 
 AUDIO_EXTENSIONS = frozenset({".aac", ".caf", ".m4a", ".mp3", ".wav"})
@@ -32,6 +33,7 @@ class WatchFolder:
 class WatchScanResult:
     seen: int
     processed: int
+    ignored: int
     skipped: int
     failed: int
 
@@ -112,7 +114,7 @@ def scan_watch_folders(
     stable_age_seconds: int = DEFAULT_STABLE_AGE_SECONDS,
     progress: ProgressFn | None = None,
 ) -> WatchScanResult:
-    seen = processed = skipped = failed = 0
+    seen = processed = ignored = skipped = failed = 0
     now = time.time()
 
     for folder in list_watch_folders(connection):
@@ -132,7 +134,7 @@ def scan_watch_folders(
                 _report(progress, f"Skipping recently modified file {audio_path}")
                 continue
 
-            if _item_done_for_current_file(connection, audio_path, stat.st_size, stat.st_mtime_ns):
+            if _item_final_for_current_file(connection, audio_path, stat.st_size, stat.st_mtime_ns):
                 skipped += 1
                 continue
 
@@ -150,6 +152,11 @@ def scan_watch_folders(
                     storage=storage,
                     progress=progress,
                 )
+            except RecordingIgnoredError as exc:
+                ignored += 1
+                _mark_item_ignored(connection, audio_path, exc.meeting.id, exc.quality.reason)
+                _report(progress, f"Ignored {audio_path}: {exc.quality.reason}")
+                continue
             except Exception as exc:
                 failed += 1
                 _mark_item_failed(connection, audio_path, str(exc))
@@ -159,7 +166,9 @@ def scan_watch_folders(
             processed += 1
             _mark_item_done(connection, audio_path, result.meeting.id)
 
-    return WatchScanResult(seen=seen, processed=processed, skipped=skipped, failed=failed)
+    return WatchScanResult(
+        seen=seen, processed=processed, ignored=ignored, skipped=skipped, failed=failed
+    )
 
 
 def _resolve_folder_path(path: Path) -> Path:
@@ -225,13 +234,13 @@ def _upsert_seen_item(
             )
 
 
-def _item_done_for_current_file(
+def _item_final_for_current_file(
     connection: Connection, path: Path, size_bytes: int, mtime_ns: int
 ) -> bool:
     item = _watch_item(connection, path)
     return bool(
         item is not None
-        and item["status"] == "done"
+        and item["status"] in {"done", "ignored"}
         and item["size_bytes"] == size_bytes
         and item["mtime_ns"] == mtime_ns
     )
@@ -262,6 +271,21 @@ def _mark_item_done(connection: Connection, path: Path, meeting_id: str) -> None
             WHERE path = ?
             """,
             (meeting_id, str(path)),
+        )
+
+
+def _mark_item_ignored(
+    connection: Connection, path: Path, meeting_id: str, reason: str
+) -> None:
+    with connection:
+        connection.execute(
+            """
+            UPDATE watch_items
+            SET status = 'ignored', meeting_id = ?, error_message = ?,
+                processed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE path = ?
+            """,
+            (meeting_id, reason, str(path)),
         )
 
 

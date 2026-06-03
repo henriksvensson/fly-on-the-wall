@@ -35,6 +35,13 @@ from fly_on_the_wall.providers.openai_cleanup import (
 from fly_on_the_wall.providers.openai_cleanup import (
     DEFAULT_MODEL as DEFAULT_CLEANUP_MODEL,
 )
+from fly_on_the_wall.publishing import publish_enabled_targets
+from fly_on_the_wall.recording_quality import (
+    RecordingIgnoredError,
+    assess_after_transcription,
+    assess_before_transcription,
+    store_recording_quality,
+)
 from fly_on_the_wall.rendering import render_named_transcript
 from fly_on_the_wall.secrets import get_api_key
 from fly_on_the_wall.speaker_identity import match_provider_run_speakers
@@ -65,6 +72,13 @@ def process_audio(
     paths = storage or ensure_storage_layout()
     _report(progress, "Importing audio")
     meeting = import_meeting(connection, audio_path, title, config, paths, description)
+    pre_quality = assess_before_transcription(connection, meeting)
+    if pre_quality is not None:
+        store_recording_quality(connection, meeting.id, pre_quality)
+        if pre_quality.status in {"empty", "nonsense"}:
+            _report(progress, f"Ignoring recording ({pre_quality.reason})")
+            raise RecordingIgnoredError(meeting, pre_quality)
+
     existing_provider_run = latest_completed_provider_run(connection, meeting.id)
     if existing_provider_run is None:
         _report(progress, "Transcribing audio with ElevenLabs")
@@ -142,7 +156,13 @@ def _refresh_provider_run(
     progress: ProgressFn | None,
 ) -> ExportResult:
     _report(progress, "Normalizing transcript")
-    normalize_provider_run(connection, provider_run_id)
+    segments = normalize_provider_run(connection, provider_run_id)
+    quality = assess_after_transcription(connection, meeting, segments)
+    store_recording_quality(connection, meeting.id, quality)
+    if quality.status in {"empty", "nonsense"}:
+        _report(progress, f"Ignoring recording ({quality.reason})")
+        raise RecordingIgnoredError(meeting, quality)
+
     _report(progress, "Matching speaker identities")
     try:
         match_provider_run_speakers(connection, provider_run_id, embedding_backend, paths)
@@ -191,7 +211,20 @@ def _refresh_provider_run(
 
     _report(progress, "Exporting markdown")
     export = export_markdown_transcript(connection, meeting.id, cleaned_transcript, analysis, paths)
+    _publish_enabled_targets(connection, meeting.id, progress)
     return export
+
+
+def _publish_enabled_targets(
+    connection: Connection, meeting_id: str, progress: ProgressFn | None
+) -> None:
+    try:
+        published = publish_enabled_targets(connection, meeting_id)
+    except ValueError as exc:
+        _report(progress, f"Publishing skipped ({exc})")
+        return
+    for result in published:
+        _report(progress, f"Published to {result.target.name}: {result.output_path}")
 
 
 def _suggest_and_apply_title(
