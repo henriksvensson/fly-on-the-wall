@@ -1,5 +1,5 @@
 from fly_on_the_wall.db import database
-from fly_on_the_wall.speakers import list_unknown_speakers
+from fly_on_the_wall.speakers import list_unknown_speakers, mark_speaker_ignored
 
 
 def test_list_unknown_speakers_returns_unassigned_local_speakers(tmp_path) -> None:
@@ -10,6 +10,18 @@ def test_list_unknown_speakers_returns_unassigned_local_speakers(tmp_path) -> No
     assert len(unknown) == 1
     assert unknown[0]["id"] == "local-1"
     assert unknown[0]["segment_count"] == 1
+
+
+def test_list_unknown_speakers_excludes_ignored_local_speakers(tmp_path) -> None:
+    with database(tmp_path / "fly.db") as connection:
+        _insert_unknown_fixture(connection)
+        mark_speaker_ignored(connection, "local-1")
+
+        unknown = list_unknown_speakers(connection, "intro")
+        assignment = connection.execute("SELECT status FROM speaker_assignments").fetchone()
+
+    assert unknown == []
+    assert assignment["status"] == "ignored"
 
 
 def _insert_unknown_fixture(connection) -> None:

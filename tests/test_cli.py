@@ -106,6 +106,13 @@ def test_meetings_speakers_review_command_exists() -> None:
     assert "unknown meeting speakers" in result.stdout
 
 
+def test_meetings_speakers_ignore_command_exists() -> None:
+    result = runner.invoke(app, ["meetings", "speakers", "ignore", "--help"])
+
+    assert result.exit_code == 0
+    assert "not shown during review" in result.stdout
+
+
 def test_refresh_group_exists() -> None:
     result = runner.invoke(app, ["refresh", "--help"])
 
@@ -143,13 +150,13 @@ def test_speakers_review_quit_still_prompts_for_refresh(monkeypatch) -> None:
         {"id": "speaker-1", "meeting_slug": "intro", "label": "speaker_0"},
         {"id": "speaker-2", "meeting_slug": "intro", "label": "speaker_1"},
     ]
-    actions = iter(["u", "q"])
+    actions = iter(["i", "q"])
 
     monkeypatch.setattr(cli, "database", fake_database)
     monkeypatch.setattr(cli, "list_unknown_speakers", lambda connection, meeting=None: speakers)
     monkeypatch.setattr(cli, "speaker_examples", lambda connection, speaker_id, limit=1: [])
     monkeypatch.setattr(cli, "prepare_speaker_review_clip", lambda connection, speaker_id: None)
-    monkeypatch.setattr(cli, "mark_unknown", lambda connection, speaker_id: None)
+    monkeypatch.setattr(cli, "mark_speaker_ignored", lambda connection, speaker_id: None)
     monkeypatch.setattr(cli, "_select_speaker_review_action", lambda clip_available: next(actions))
     monkeypatch.setattr(cli, "_select_speaker_review_follow_up_action", lambda: "n")
 

@@ -96,14 +96,36 @@ def extract_clip(input_path: Path, output_path: Path, start: float, end: float) 
 
 
 def play_audio(audio_path: Path, player: str = "ffplay", stop_on_enter: bool = False) -> None:
-    if player == "ffplay":
-        command = ["ffplay", "-nodisp", "-autoexit", str(audio_path)]
-    else:
-        command = [player, str(audio_path)]
+    command = audio_playback_command(audio_path, player)
     if stop_on_enter:
         _run_until_enter(command)
         return
     _run(command)
+
+
+def audio_playback_command(audio_path: Path, player: str = "ffplay") -> list[str]:
+    if player == "ffplay":
+        return ["ffplay", "-nodisp", "-autoexit", str(audio_path)]
+    return [player, str(audio_path)]
+
+
+def start_audio_playback(audio_path: Path, player: str = "ffplay") -> subprocess.Popen:
+    command = audio_playback_command(audio_path, player)
+    try:
+        return subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except FileNotFoundError as exc:
+        raise AudioError(f"Required audio tool not found: {command[0]}") from exc
+
+
+def stop_audio_playback(process: subprocess.Popen) -> None:
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
 
 
 def _run_until_enter(command: list[str]) -> None:

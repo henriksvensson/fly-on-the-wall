@@ -97,6 +97,14 @@ def assign_speaker_to_person(
 
 
 def mark_speaker_unknown(connection: Connection, local_speaker_id: str) -> None:
+    _mark_speaker_status(connection, local_speaker_id, "unknown")
+
+
+def mark_speaker_ignored(connection: Connection, local_speaker_id: str) -> None:
+    _mark_speaker_status(connection, local_speaker_id, "ignored")
+
+
+def _mark_speaker_status(connection: Connection, local_speaker_id: str, status: str) -> None:
     meeting_id = _local_speaker_meeting_id(connection, local_speaker_id)
     if meeting_id is None:
         raise ValueError(f"Local speaker not found: {local_speaker_id}")
@@ -114,8 +122,8 @@ def mark_speaker_unknown(connection: Connection, local_speaker_id: str) -> None:
             (
                 str(uuid4()),
                 local_speaker_id,
-                "unknown",
-                json.dumps({"method": "user_correction"}),
+                status,
+                json.dumps({"method": "user_correction", "action": status}),
             ),
         )
         _record_correction(connection, "speaker_assignment", meeting_id, local_speaker_id, None)

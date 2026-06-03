@@ -12,7 +12,7 @@ from fly_on_the_wall.embeddings import (
 )
 from fly_on_the_wall.people import create_person, get_person
 from fly_on_the_wall.speaker_matching import SpeakerMatch, match_local_speakers
-from fly_on_the_wall.speakers import assign_speaker_to_person, mark_speaker_unknown
+from fly_on_the_wall.speakers import assign_speaker_to_person
 from fly_on_the_wall.storage import StoragePaths, storage_paths
 from fly_on_the_wall.voice_samples import VoiceSample, create_voice_sample_from_span
 
@@ -175,7 +175,3 @@ def representative_speaker_clip(
         start_time=float(row["start_time"]),
         end_time=float(row["end_time"]),
     )
-
-
-def mark_unknown(connection: Connection, local_speaker_id: str) -> None:
-    mark_speaker_unknown(connection, local_speaker_id)

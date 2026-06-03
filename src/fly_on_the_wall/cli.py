@@ -15,7 +15,7 @@ from rich.table import Table
 from watchfiles import watch
 
 from fly_on_the_wall import __version__
-from fly_on_the_wall.audio import AudioError, play_audio
+from fly_on_the_wall.audio import AudioError, start_audio_playback, stop_audio_playback
 from fly_on_the_wall.config import load_config
 from fly_on_the_wall.db import database
 from fly_on_the_wall.doctor import has_failures, run_checks
@@ -66,12 +66,12 @@ from fly_on_the_wall.secrets import (
 )
 from fly_on_the_wall.speaker_identity import (
     create_voice_identity_from_speaker,
-    mark_unknown,
     prepare_speaker_review_clip,
 )
 from fly_on_the_wall.speakers import (
     assign_speaker_to_person,
     list_unknown_speakers,
+    mark_speaker_ignored,
     speaker_examples,
 )
 from fly_on_the_wall.voice_samples import list_voice_samples
@@ -122,6 +122,7 @@ class MenuChoice:
     shortcut: str | None
     label: str
     value: str | None
+    playback_path: Path | None = None
 
 
 def _version_callback(show_version: bool) -> None:
@@ -605,14 +606,7 @@ def speakers_review(
                 console.print(f"Clip: {clip_path}")
 
             while True:
-                action = _select_speaker_review_action(clip_path is not None)
-                if action == "p" and clip_path is not None:
-                    try:
-                        console.print("Playing. Press Enter to stop.")
-                        play_audio(clip_path, stop_on_enter=True)
-                    except AudioError as exc:
-                        console.print(f"Could not play clip: {exc}")
-                    continue
+                action = _select_speaker_review_action(clip_path)
                 if action == "a":
                     person = _select_person(connection)
                     if person is None:
@@ -660,9 +654,9 @@ def speakers_review(
                     console.print(f"Voice sample: {result.voice_sample.audio_path}")
                     changed_meetings.add(speaker["meeting_slug"])
                     break
-                if action == "u":
-                    mark_unknown(connection, speaker["id"])
-                    console.print("Kept as unknown.")
+                if action == "i":
+                    mark_speaker_ignored(connection, speaker["id"])
+                    console.print("Ignored meeting speaker.")
                     changed_meetings.add(speaker["meeting_slug"])
                     break
                 if action == "s":
@@ -700,6 +694,18 @@ def speakers_assign(local_speaker_id: str, person: str) -> None:
         console.print(f"Created person {assignment['name']}")
     console.print(f"Assigned {assignment['local_speaker_id']} to {assignment['name']}")
     console.print("Next: fot refresh speakers <meeting>")
+
+
+@meeting_speakers_app.command("ignore")
+def speakers_ignore(local_speaker_id: str) -> None:
+    """Ignore a meeting-local speaker so it is not shown during review."""
+    with database() as connection:
+        try:
+            mark_speaker_ignored(connection, local_speaker_id)
+        except ValueError as exc:
+            console.print(str(exc))
+            raise typer.Exit(code=1) from exc
+    console.print(f"Ignored meeting speaker {local_speaker_id}")
 
 
 @refresh_app.command("speakers")
@@ -1053,16 +1059,16 @@ def _select_person(connection) -> Person | None:
     return next(person for person in people if person.id == selected_person_id)
 
 
-def _select_speaker_review_action(clip_available: bool) -> str:
+def _select_speaker_review_action(clip_path: Path | None) -> str:
     choices = []
-    if clip_available:
-        choices.append(MenuChoice("p", "Play clip", "p"))
+    if clip_path is not None:
+        choices.append(MenuChoice("p", "Play clip", None, playback_path=clip_path))
     choices.extend(
         [
             MenuChoice("a", "Assign with voice sample", "a"),
             MenuChoice("n", "Assign only", "n"),
             MenuChoice("c", "New known person with voice sample", "c"),
-            MenuChoice("u", "Mark unknown", "u"),
+            MenuChoice("i", "Ignore speaker", "i"),
             MenuChoice("s", "Skip", "s"),
             MenuChoice("q", "Quit review", "q"),
         ]
@@ -1082,12 +1088,40 @@ def _select_speaker_review_follow_up_action() -> str:
 def _select_menu(title: str, choices: list[MenuChoice]) -> str | None:
     selected_index = 0
     selected_value: str | None = None
+    status_message = ""
+    playback_process = None
     key_bindings = KeyBindings()
 
-    def finish(value: str | None) -> None:
+    def finish(choice: MenuChoice) -> None:
         nonlocal selected_value
-        selected_value = value
+        if choice.playback_path is not None:
+            toggle_playback(choice.playback_path)
+            return
+        stop_playback()
+        selected_value = choice.value
         application.exit()
+
+    def toggle_playback(audio_path: Path) -> None:
+        nonlocal playback_process, status_message
+        if playback_process is not None and playback_process.poll() is None:
+            stop_playback()
+            return
+        try:
+            playback_process = start_audio_playback(audio_path)
+        except AudioError as exc:
+            status_message = f"Could not play clip: {exc}"
+            application.invalidate()
+            return
+        status_message = "Playing. Press Enter to stop."
+        application.invalidate()
+
+    def stop_playback() -> None:
+        nonlocal playback_process, status_message
+        if playback_process is not None:
+            stop_audio_playback(playback_process)
+            playback_process = None
+        status_message = ""
+        application.invalidate()
 
     def move(offset: int) -> None:
         nonlocal selected_index
@@ -1104,27 +1138,39 @@ def _select_menu(title: str, choices: list[MenuChoice]) -> str | None:
 
     @key_bindings.add("enter")
     def _enter(_event) -> None:
-        finish(choices[selected_index].value)
+        if playback_process is not None and playback_process.poll() is None:
+            stop_playback()
+            return
+        finish(choices[selected_index])
 
     @key_bindings.add("escape")
     @key_bindings.add("c-c")
     def _cancel(_event) -> None:
-        finish(None)
+        nonlocal selected_value
+        stop_playback()
+        selected_value = None
+        application.exit()
 
     bound_shortcuts: set[str] = set()
     for choice in choices:
         if choice.shortcut is None or choice.shortcut in bound_shortcuts:
             continue
         bound_shortcuts.add(choice.shortcut)
-        key_bindings.add(choice.shortcut)(lambda _event, value=choice.value: finish(value))
+        key_bindings.add(choice.shortcut)(lambda _event, selected=choice: finish(selected))
 
     def render_menu():
+        nonlocal playback_process, status_message
+        if playback_process is not None and playback_process.poll() is not None:
+            playback_process = None
+            status_message = ""
         lines = [("class:title", f"{title}\n")]
         for index, choice in enumerate(choices):
             prefix = "›" if index == selected_index else " "
             style = "class:selected" if index == selected_index else ""
             shortcut = f"[{choice.shortcut}] " if choice.shortcut is not None else ""
             lines.append((style, f"{prefix} {shortcut}{choice.label}\n"))
+        if status_message:
+            lines.append(("class:status", f"\n{status_message}\n"))
         lines.append(("class:help", "\nUse arrows, Enter, shortcut key, or Esc to cancel."))
         return lines
 
