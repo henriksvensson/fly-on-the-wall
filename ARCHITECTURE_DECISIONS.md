@@ -77,7 +77,7 @@ fot refresh speakers <meeting-id>
 fot refresh stale-meetings
 fot refresh meeting <meeting-id>
 fot export <meeting-id>
-fot status <meeting-id>
+fot meetings status <meeting-id>
 fot doctor
 ```
 

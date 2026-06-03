@@ -8,13 +8,6 @@ from fly_on_the_wall.cli import app
 runner = CliRunner()
 
 
-def test_cli_hello() -> None:
-    result = runner.invoke(app, ["hello"])
-
-    assert result.exit_code == 0
-    assert "Fly on the Wall CLI is ready." in result.stdout
-
-
 def test_cli_version() -> None:
     result = runner.invoke(app, ["--version"])
 
@@ -90,6 +83,13 @@ def test_meetings_rename_command_exists() -> None:
 
     assert result.exit_code == 0
     assert "Manually rename a meeting" in result.stdout
+
+
+def test_meetings_status_command_exists() -> None:
+    result = runner.invoke(app, ["meetings", "status", "--help"])
+
+    assert result.exit_code == 0
+    assert "pipeline status" in result.stdout
 
 
 def test_speakers_group_exists() -> None:

@@ -18,7 +18,6 @@ from fly_on_the_wall.embeddings import EmbeddingBackend, PyannoteEmbeddingBacken
 from fly_on_the_wall.meetings import (
     delete_meeting,
     get_meeting,
-    import_meeting,
     list_meetings,
     meeting_stage_status,
     rename_meeting,
@@ -131,12 +130,6 @@ def main(
 
 
 @app.command()
-def hello() -> None:
-    """Verify that the CLI is installed and runnable."""
-    console.print("Fly on the Wall CLI is ready.")
-
-
-@app.command()
 def doctor() -> None:
     """Check local runtime configuration and dependencies."""
     checks = run_checks()
@@ -151,28 +144,6 @@ def doctor() -> None:
     console.print(table)
     if has_failures(checks):
         raise typer.Exit(code=1)
-
-
-@app.command("import")
-def import_audio(
-    audio_path: Annotated[Path, typer.Argument(exists=True, file_okay=True, dir_okay=False)],
-    title: Annotated[
-        str | None, typer.Option("--title", "-t", help="Manual meeting title override.")
-    ] = None,
-    description: Annotated[
-        str | None, typer.Option("--description", "-d", help="Meeting context.")
-    ] = None,
-) -> None:
-    """Import an audio file into application storage."""
-    config = load_config()
-    with database() as connection:
-        meeting = import_meeting(connection, audio_path, title, config, description=description)
-
-    console.print(f"Imported meeting {meeting.slug}")
-    console.print(f"Title: {meeting.title}")
-    console.print(f"ID: {meeting.id}")
-    console.print(f"Audio: {meeting.imported_audio_path}")
-    console.print(f"Next: fot process {audio_path}")
 
 
 @app.command()
@@ -462,7 +433,7 @@ def meetings_list() -> None:
     with database() as connection:
         meetings = list_meetings(connection)
     if not meetings:
-        console.print("No meetings found. Import one with: fot import <audio>")
+        console.print("No meetings found. Process one with: fot process <audio>")
         return
     table = Table(title="Meetings")
     table.add_column("Slug")
@@ -536,8 +507,8 @@ def meetings_remove(
     console.print(f"Removed paths: {len(result.removed_paths)}")
 
 
-@app.command()
-def status(meeting: str) -> None:
+@meetings_app.command("status")
+def meetings_status(meeting: str) -> None:
     """Show pipeline status for a meeting."""
     with database() as connection:
         stages = meeting_stage_status(connection, meeting)
