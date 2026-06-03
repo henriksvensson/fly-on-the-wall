@@ -163,10 +163,7 @@ def scan_watch_folders(
 
 
 def _resolve_folder_path(path: Path) -> Path:
-    resolved_path = path.expanduser().resolve()
-    if not resolved_path.is_dir():
-        raise FileNotFoundError(f"Watch folder does not exist: {resolved_path}")
-    return resolved_path
+    return path.expanduser().resolve()
 
 
 def _watch_folder_from_row(row) -> WatchFolder:

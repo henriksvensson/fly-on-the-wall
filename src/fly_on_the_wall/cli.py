@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from time import sleep
 from typing import Annotated
 
 import typer
@@ -212,18 +213,36 @@ def watch_run(
         console.print("Add one with: fot watch folders add <path>")
         raise typer.Exit(code=1)
 
-    paths = [folder.path for folder in folders]
     console.print("Watching folders for audio changes. Press Ctrl+C to stop.")
-    for path in paths:
+    for path in [folder.path for folder in folders]:
         console.print(f"- {path}")
 
     _scan_watch_once(config, stable_age_seconds)
-    for changes in watch(
-        *paths,
-        recursive=True,
-        yield_on_timeout=True,
-        rust_timeout=interval_seconds * 1000,
-    ):
+    while True:
+        with database() as connection:
+            folders = [folder for folder in list_watch_folders(connection) if folder.enabled]
+
+        existing_paths = [folder.path for folder in folders if folder.path.is_dir()]
+        if not existing_paths:
+            console.print("No watched folders are currently mounted. Running safety scan.")
+            _scan_watch_once(config, stable_age_seconds)
+            sleep(interval_seconds)
+            continue
+
+        try:
+            changes = next(
+                watch(
+                    *existing_paths,
+                    recursive=True,
+                    yield_on_timeout=True,
+                    rust_timeout=interval_seconds * 1000,
+                )
+            )
+        except (OSError, RuntimeError) as exc:
+            console.print(f"Watch backend restarted after folder change: {exc}")
+            _scan_watch_once(config, stable_age_seconds)
+            continue
+
         if changes:
             console.print(f"Detected {len(changes)} file change(s).")
         else:
@@ -233,7 +252,7 @@ def watch_run(
 
 @watch_folders_app.command("add")
 def watch_folders_add(
-    path: Annotated[Path, typer.Argument(exists=True, file_okay=False, dir_okay=True)],
+    path: Annotated[Path, typer.Argument(file_okay=False, dir_okay=True)],
     name: Annotated[str | None, typer.Option("--name", "-n", help="Optional folder name.")] = None,
 ) -> None:
     """Add a folder to scan for audio files."""

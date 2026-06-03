@@ -35,6 +35,29 @@ def test_watch_folder_crud(tmp_path: Path) -> None:
     assert removed.id == folder.id
 
 
+def test_can_add_watch_folder_before_it_exists(tmp_path: Path) -> None:
+    removable_path = tmp_path / "PHILIPS"
+
+    with database(tmp_path / "fly.db") as connection:
+        folder = add_watch_folder(connection, removable_path, name="recorder")
+
+    assert folder.path == removable_path
+    assert folder.enabled
+
+
+def test_scan_skips_missing_watch_folder(tmp_path: Path) -> None:
+    removable_path = tmp_path / "PHILIPS"
+    messages: list[str] = []
+
+    with database(tmp_path / "fly.db") as connection:
+        add_watch_folder(connection, removable_path, name="recorder")
+        result = scan_watch_folders(connection, AppConfig(), progress=messages.append)
+
+    assert result.seen == 0
+    assert result.processed == 0
+    assert messages == [f"Skipping missing folder {removable_path}"]
+
+
 def test_scan_processes_stable_audio_file(tmp_path: Path) -> None:
     inbox = tmp_path / "inbox"
     inbox.mkdir()
