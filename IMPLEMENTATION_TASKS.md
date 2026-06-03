@@ -83,3 +83,7 @@
 
 - [x] **Polish CLI output**
     Improve progress messages, errors, and next-step hints for normal daily use.
+
+- [ ] **Infer meeting title from transcript**
+    Use the final cleaned transcript, likely during or after analysis, to suggest or assign a
+    content-based meeting title so users do not have to provide one up front.

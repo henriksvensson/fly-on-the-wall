@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fly_on_the_wall.storage import ensure_storage_layout, storage_paths
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 SCHEMA_STATEMENTS = (
     """
@@ -166,6 +166,35 @@ SCHEMA_STATEMENTS = (
         FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE SET NULL,
         FOREIGN KEY(local_speaker_id) REFERENCES local_speakers(id) ON DELETE SET NULL,
         FOREIGN KEY(person_id) REFERENCES people(id) ON DELETE SET NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS watch_folders (
+        id TEXT PRIMARY KEY,
+        name TEXT UNIQUE,
+        path TEXT NOT NULL UNIQUE,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS watch_items (
+        id TEXT PRIMARY KEY,
+        folder_id TEXT NOT NULL,
+        path TEXT NOT NULL UNIQUE,
+        file_sha256 TEXT,
+        size_bytes INTEGER,
+        mtime_ns INTEGER,
+        status TEXT NOT NULL,
+        meeting_id TEXT,
+        error_message TEXT,
+        first_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        processed_at TEXT,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(folder_id) REFERENCES watch_folders(id) ON DELETE CASCADE,
+        FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE SET NULL
     )
     """,
 )

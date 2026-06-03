@@ -6,6 +6,7 @@ from typing import Annotated
 import typer
 from rich.console import Console
 from rich.table import Table
+from watchfiles import watch
 
 from fly_on_the_wall import __version__
 from fly_on_the_wall.audio import AudioError, play_audio
@@ -46,6 +47,14 @@ from fly_on_the_wall.speakers import (
     speaker_examples,
 )
 from fly_on_the_wall.voice_samples import list_voice_samples
+from fly_on_the_wall.watch import (
+    DEFAULT_STABLE_AGE_SECONDS,
+    add_watch_folder,
+    list_watch_folders,
+    remove_watch_folder,
+    scan_watch_folders,
+    set_watch_folder_enabled,
+)
 
 app = typer.Typer(
     name="fot",
@@ -57,11 +66,15 @@ meetings_app = typer.Typer(help="Inspect meetings.", no_args_is_help=True)
 speakers_app = typer.Typer(help="Review and assign speakers.", no_args_is_help=True)
 reanalyze_app = typer.Typer(help="Mark and inspect stale analysis.", no_args_is_help=True)
 secrets_app = typer.Typer(help="Manage API keys in the OS keyring.", no_args_is_help=True)
+watch_app = typer.Typer(help="Process audio from watched folders.", no_args_is_help=True)
+watch_folders_app = typer.Typer(help="Manage watched folders.", no_args_is_help=True)
 app.add_typer(people_app, name="people")
 app.add_typer(meetings_app, name="meetings")
 app.add_typer(speakers_app, name="speakers")
 app.add_typer(reanalyze_app, name="reanalyze")
 app.add_typer(secrets_app, name="secrets")
+app.add_typer(watch_app, name="watch")
+watch_app.add_typer(watch_folders_app, name="folders")
 console = Console()
 
 
@@ -150,6 +163,129 @@ def process(
     console.print(f"Transcript: {result.export.transcript_path}")
     console.print(f"Analysis: {result.export.analysis_path}")
     console.print(f"Review unknown speakers: fot speakers unknown --meeting {result.meeting.slug}")
+
+
+@watch_app.command("scan")
+def watch_scan(
+    stable_age_seconds: Annotated[
+        int,
+        typer.Option(
+            "--stable-age-seconds",
+            min=0,
+            help="Only process files unchanged for at least this many seconds.",
+        ),
+    ] = DEFAULT_STABLE_AGE_SECONDS,
+) -> None:
+    """Scan enabled watched folders once and process new audio files."""
+    config = load_config()
+    _scan_watch_once(config, stable_age_seconds)
+
+
+@watch_app.command("run")
+def watch_run(
+    interval_seconds: Annotated[
+        int,
+        typer.Option("--interval-seconds", min=1, help="Seconds between safety scans."),
+    ] = 60,
+    stable_age_seconds: Annotated[
+        int,
+        typer.Option(
+            "--stable-age-seconds",
+            min=0,
+            help="Only process files unchanged for at least this many seconds.",
+        ),
+    ] = DEFAULT_STABLE_AGE_SECONDS,
+) -> None:
+    """Watch enabled folders and process new audio files as they appear."""
+    config = load_config()
+    with database() as connection:
+        folders = [folder for folder in list_watch_folders(connection) if folder.enabled]
+
+    if not folders:
+        console.print("No enabled watch folders configured.")
+        console.print("Add one with: fot watch folders add <path>")
+        raise typer.Exit(code=1)
+
+    paths = [folder.path for folder in folders]
+    console.print("Watching folders for audio changes. Press Ctrl+C to stop.")
+    for path in paths:
+        console.print(f"- {path}")
+
+    _scan_watch_once(config, stable_age_seconds)
+    for changes in watch(
+        *paths,
+        recursive=True,
+        yield_on_timeout=True,
+        rust_timeout=interval_seconds * 1000,
+    ):
+        if changes:
+            console.print(f"Detected {len(changes)} file change(s).")
+        else:
+            console.print("Running periodic safety scan.")
+        _scan_watch_once(config, stable_age_seconds)
+
+
+@watch_folders_app.command("add")
+def watch_folders_add(
+    path: Annotated[Path, typer.Argument(exists=True, file_okay=False, dir_okay=True)],
+    name: Annotated[str | None, typer.Option("--name", "-n", help="Optional folder name.")] = None,
+) -> None:
+    """Add a folder to scan for audio files."""
+    with database() as connection:
+        try:
+            folder = add_watch_folder(connection, path, name)
+        except Exception as exc:
+            console.print(str(exc))
+            raise typer.Exit(code=1) from exc
+    console.print(f"Added watch folder {folder.path}")
+    if folder.name:
+        console.print(f"Name: {folder.name}")
+
+
+@watch_folders_app.command("list")
+def watch_folders_list() -> None:
+    """List watched folders."""
+    with database() as connection:
+        folders = list_watch_folders(connection)
+    if not folders:
+        console.print("No watch folders configured.")
+        return
+    table = Table(title="Watch Folders")
+    table.add_column("ID")
+    table.add_column("Name")
+    table.add_column("Enabled")
+    table.add_column("Path")
+    for folder in folders:
+        table.add_row(
+            folder.id,
+            folder.name or "",
+            "yes" if folder.enabled else "no",
+            str(folder.path),
+        )
+    console.print(table)
+
+
+@watch_folders_app.command("remove")
+def watch_folders_remove(identifier: str) -> None:
+    """Remove a watched folder by id, name, or path."""
+    with database() as connection:
+        folder = remove_watch_folder(connection, identifier)
+    if folder is None:
+        console.print(f"Watch folder not found: {identifier}")
+        raise typer.Exit(code=1)
+    console.print(f"Removed watch folder {folder.path}")
+
+
+@watch_folders_app.command("enable")
+def watch_folders_enable(identifier: str) -> None:
+    """Enable a watched folder by id, name, or path."""
+    _set_watch_folder_enabled_command(identifier, True)
+
+
+@watch_folders_app.command("disable")
+def watch_folders_disable(identifier: str) -> None:
+    """Disable a watched folder by id, name, or path."""
+    _set_watch_folder_enabled_command(identifier, False)
 
 
 @meetings_app.command("list")
@@ -497,6 +633,30 @@ def _try_embedding_backend() -> EmbeddingBackend | None:
     except RuntimeError as exc:
         console.print(f"Voice sample saved without embedding ({exc})")
         return None
+
+
+def _scan_watch_once(config, stable_age_seconds: int) -> None:
+    with database() as connection:
+        result = scan_watch_folders(
+            connection,
+            config,
+            stable_age_seconds=stable_age_seconds,
+            progress=lambda message: console.print(f"-> {message}"),
+        )
+    console.print(
+        f"Watch scan complete: {result.processed} processed, "
+        f"{result.skipped} skipped, {result.failed} failed, {result.seen} seen."
+    )
+
+
+def _set_watch_folder_enabled_command(identifier: str, enabled: bool) -> None:
+    with database() as connection:
+        folder = set_watch_folder_enabled(connection, identifier, enabled)
+    if folder is None:
+        console.print(f"Watch folder not found: {identifier}")
+        raise typer.Exit(code=1)
+    state = "Enabled" if enabled else "Disabled"
+    console.print(f"{state} watch folder {folder.path}")
 
 
 def _select_person(connection) -> Person | None:
