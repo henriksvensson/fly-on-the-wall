@@ -69,10 +69,9 @@ fot meetings show <meeting-id>
 fot people list
 fot people create "Person B"
 fot people show <person>
-fot speakers review --meeting <meeting-id>
-fot speakers unknown
-fot speakers assign <unknown-id> --person "Person B"
-fot speakers create-person <unknown-id> --name "Person B"
+fot meetings speakers review --meeting <meeting-id>
+fot meetings speakers unknown
+fot meetings speakers assign <unknown-id> "Person B"
 fot refresh speakers <meeting-id>
 fot refresh stale-meetings
 fot refresh meeting <meeting-id>

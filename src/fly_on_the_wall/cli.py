@@ -66,7 +66,6 @@ from fly_on_the_wall.speaker_identity import (
 )
 from fly_on_the_wall.speakers import (
     assign_speaker_to_person,
-    create_person_from_speaker,
     list_unknown_speakers,
     speaker_examples,
 )
@@ -90,7 +89,10 @@ people_embeddings_app = typer.Typer(
     help="Manage known people's voice embeddings.", no_args_is_help=True
 )
 meetings_app = typer.Typer(help="Inspect meetings.", no_args_is_help=True)
-speakers_app = typer.Typer(help="Review and assign speakers.", no_args_is_help=True)
+meeting_speakers_app = typer.Typer(
+    help="Review meeting-local speakers and assign them to people.",
+    no_args_is_help=True,
+)
 refresh_app = typer.Typer(help="Refresh derived meeting outputs.", no_args_is_help=True)
 secrets_app = typer.Typer(help="Manage API keys in the OS keyring.", no_args_is_help=True)
 watch_app = typer.Typer(help="Process audio from watched folders.", no_args_is_help=True)
@@ -100,7 +102,7 @@ publish_targets_app = typer.Typer(help="Manage publish targets.", no_args_is_hel
 app.add_typer(people_app, name="people")
 people_app.add_typer(people_embeddings_app, name="embeddings")
 app.add_typer(meetings_app, name="meetings")
-app.add_typer(speakers_app, name="speakers")
+meetings_app.add_typer(meeting_speakers_app, name="speakers")
 app.add_typer(refresh_app, name="refresh")
 app.add_typer(secrets_app, name="secrets")
 app.add_typer(watch_app, name="watch")
@@ -175,7 +177,9 @@ def process(
     console.print(f"Processed meeting {result.meeting.slug}")
     console.print(f"Transcript: {result.export.transcript_path}")
     console.print(f"Analysis: {result.export.analysis_path}")
-    console.print(f"Review unknown speakers: fot speakers unknown --meeting {result.meeting.slug}")
+    console.print(
+        f"Review unknown speakers: fot meetings speakers unknown --meeting {result.meeting.slug}"
+    )
 
 
 @watch_app.command("scan")
@@ -524,13 +528,13 @@ def meetings_status(meeting: str) -> None:
     console.print(table)
 
 
-@speakers_app.command("unknown")
+@meeting_speakers_app.command("unknown")
 def speakers_unknown(
     meeting: Annotated[
         str | None, typer.Option("--meeting", "-m", help="Meeting ID or slug.")
     ] = None,
 ) -> None:
-    """List unknown local speakers."""
+    """List meeting-local speakers that are not assigned to people."""
     with database() as connection:
         speakers = list_unknown_speakers(connection, meeting)
     if not speakers:
@@ -552,13 +556,13 @@ def speakers_unknown(
     console.print(table)
 
 
-@speakers_app.command("review")
+@meeting_speakers_app.command("review")
 def speakers_review(
     meeting: Annotated[
         str | None, typer.Option("--meeting", "-m", help="Meeting ID or slug.")
     ] = None,
 ) -> None:
-    """Interactively review unknown speakers."""
+    """Interactively review and assign unknown meeting speakers."""
     backend: EmbeddingBackend | None = None
     changed_meetings: set[str] = set()
     quit_review = False
@@ -572,9 +576,9 @@ def speakers_review(
         for speaker in speakers:
             if quit_review:
                 break
-            console.print(f"Unknown speaker: {speaker['id']}")
+            console.print(f"Meeting speaker: {speaker['id']}")
             console.print(f"Meeting: {speaker['meeting_slug']}")
-            console.print(f"Label: {speaker['label']}")
+            console.print(f"Provider label: {speaker['label']}")
             examples = speaker_examples(connection, speaker["id"], limit=1)
             if examples:
                 console.print(f"Example: {examples[0]['text']}")
@@ -590,8 +594,8 @@ def speakers_review(
 
             while True:
                 action = typer.prompt(
-                    "Action [p=play, a=assign+sample, n=name only, "
-                    "c=create person, u=unknown, s=skip, q=quit]",
+                    "Action [p=play, a=assign+sample, n=assign only, "
+                    "c=new person+sample, u=unknown, s=skip, q=quit]",
                     default="p" if clip_path is not None else "s",
                 ).strip().lower()
                 if action == "p" and clip_path is not None:
@@ -614,7 +618,7 @@ def speakers_review(
                     except ValueError as exc:
                         console.print(str(exc))
                         continue
-                    console.print(f"Assigned speaker to {result.person_name}")
+                    console.print(f"Assigned meeting speaker to {result.person_name}")
                     console.print(f"Voice sample: {result.voice_sample.audio_path}")
                     changed_meetings.add(speaker["meeting_slug"])
                     break
@@ -624,11 +628,13 @@ def speakers_review(
                         console.print("Assignment cancelled.")
                         continue
                     assignment = assign_speaker_to_person(connection, speaker["id"], person.id)
-                    console.print(f"Assigned speaker to {assignment['name']} without voice sample.")
+                    console.print(
+                        f"Assigned meeting speaker to {assignment['name']} without voice sample."
+                    )
                     changed_meetings.add(speaker["meeting_slug"])
                     break
                 if action == "c":
-                    name = typer.prompt("New person name")
+                    name = typer.prompt("New known person name")
                     backend = backend or _try_embedding_backend()
                     try:
                         result = create_voice_identity_from_speaker(
@@ -642,7 +648,7 @@ def speakers_review(
                     except ValueError as exc:
                         console.print(str(exc))
                         continue
-                    console.print(f"Created {result.person_name}")
+                    console.print(f"Created known person {result.person_name}")
                     console.print(f"Voice sample: {result.voice_sample.audio_path}")
                     changed_meetings.add(speaker["meeting_slug"])
                     break
@@ -677,21 +683,14 @@ def speakers_review(
                     console.print(f"Analysis: {result.export.analysis_path}")
 
 
-@speakers_app.command("assign")
+@meeting_speakers_app.command("assign")
 def speakers_assign(local_speaker_id: str, person: str) -> None:
-    """Assign a local speaker to an existing person."""
+    """Assign a meeting-local speaker to a person, creating that person if needed."""
     with database() as connection:
         assignment = assign_speaker_to_person(connection, local_speaker_id, person)
+    if assignment["created_person"]:
+        console.print(f"Created person {assignment['name']}")
     console.print(f"Assigned {assignment['local_speaker_id']} to {assignment['name']}")
-    console.print("Next: fot refresh speakers <meeting>")
-
-
-@speakers_app.command("create-person")
-def speakers_create_person(local_speaker_id: str, name: str) -> None:
-    """Create a person from a local speaker and assign it."""
-    with database() as connection:
-        assignment = create_person_from_speaker(connection, local_speaker_id, name)
-    console.print(f"Created and assigned {assignment['name']}")
     console.print("Next: fot refresh speakers <meeting>")
 
 
@@ -717,7 +716,7 @@ def refresh_speakers(
             if not results:
                 console.print("No meetings found for speaker refresh.")
                 return
-            table = Table(title="Speaker Reanalysis")
+            table = Table(title="Speaker Refresh")
             table.add_column("Meeting")
             table.add_column("New Speaker Matches")
             for result in results:

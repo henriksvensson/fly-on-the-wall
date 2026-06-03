@@ -58,7 +58,10 @@ def assign_speaker_to_person(
 ) -> dict:
     person = get_person(connection, person_id_or_name)
     if person is None:
-        raise ValueError(f"Person not found: {person_id_or_name}")
+        person = create_person(connection, person_id_or_name)
+        created_person = True
+    else:
+        created_person = False
 
     meeting_id = _local_speaker_meeting_id(connection, local_speaker_id)
     if meeting_id is None:
@@ -89,12 +92,8 @@ def assign_speaker_to_person(
         "local_speaker_id": local_speaker_id,
         "person_id": person.id,
         "name": person.display_name,
+        "created_person": created_person,
     }
-
-
-def create_person_from_speaker(connection: Connection, local_speaker_id: str, name: str) -> dict:
-    person = create_person(connection, name)
-    return assign_speaker_to_person(connection, local_speaker_id, person.id)
 
 
 def mark_speaker_unknown(connection: Connection, local_speaker_id: str) -> None:

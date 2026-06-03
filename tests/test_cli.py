@@ -92,18 +92,18 @@ def test_meetings_status_command_exists() -> None:
     assert "pipeline status" in result.stdout
 
 
-def test_speakers_group_exists() -> None:
-    result = runner.invoke(app, ["speakers", "--help"])
+def test_meetings_speakers_group_exists() -> None:
+    result = runner.invoke(app, ["meetings", "speakers", "--help"])
 
     assert result.exit_code == 0
-    assert "Review and assign speakers" in result.stdout
+    assert "meeting-local speakers" in result.stdout
 
 
-def test_speakers_review_command_exists() -> None:
-    result = runner.invoke(app, ["speakers", "review", "--help"])
+def test_meetings_speakers_review_command_exists() -> None:
+    result = runner.invoke(app, ["meetings", "speakers", "review", "--help"])
 
     assert result.exit_code == 0
-    assert "Interactively review unknown speakers" in result.stdout
+    assert "unknown meeting speakers" in result.stdout
 
 
 def test_refresh_group_exists() -> None:
@@ -152,7 +152,7 @@ def test_speakers_review_quit_still_prompts_for_refresh(monkeypatch) -> None:
     monkeypatch.setattr(cli, "mark_unknown", lambda connection, speaker_id: None)
     monkeypatch.setattr(cli.typer, "prompt", lambda *args, **kwargs: next(actions))
 
-    result = runner.invoke(app, ["speakers", "review"])
+    result = runner.invoke(app, ["meetings", "speakers", "review"])
 
     assert result.exit_code == 0
     assert "Review cancelled." in result.stdout

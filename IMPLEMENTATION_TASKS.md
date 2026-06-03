@@ -67,13 +67,13 @@
     Implement `meetings list`, `meetings show`, and `status`.
 
 - [x] **Add unknown speaker listing**
-    Implement `speakers unknown` filtered globally or by meeting.
+    Implement `meetings speakers unknown` filtered globally or by meeting.
 
 - [x] **Add interactive speaker review**
-    Show unknown speaker examples, optionally play clips, and support skip/assign/create-person actions.
+    Show unknown speaker examples, optionally play clips, and support skip/assign/create actions.
 
 - [x] **Add speaker assignment commands**
-    Implement `speakers assign` and `speakers create-person` with correction history.
+    Implement `meetings speakers assign` with correction history and missing-person creation.
 
 - [x] **Add reanalysis commands**
     Mark stale speaker-dependent stages and refresh speaker matching with `refresh speakers`.
