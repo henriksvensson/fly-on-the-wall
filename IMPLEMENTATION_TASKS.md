@@ -42,6 +42,9 @@
 - [x] **Implement local speaker embeddings**
     Extract representative clips and cache embeddings for local speakers and voice samples.
 
+- [x] **Add people embedding maintenance commands**
+    Implement `people embeddings status` and `people embeddings backfill` for known-person voice samples.
+
 - [x] **Implement speaker matching**
     Compare local speakers against multiple voice samples per person and store confidence evidence.
 
@@ -73,7 +76,10 @@
     Implement `speakers assign` and `speakers create-person` with correction history.
 
 - [x] **Add reanalysis commands**
-    Mark stale speaker-dependent stages and rerun `reanalyze speakers` or `reanalyze stale`.
+    Mark stale speaker-dependent stages and refresh speaker matching with `refresh speakers`.
+
+- [x] **Add refresh commands**
+    Refresh one meeting or all stale meetings with `refresh meeting` and `refresh stale-meetings`.
 
 - [x] **Add glossary support**
     Load global glossary and pass known names/domain terms into cleanup.

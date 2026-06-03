@@ -50,6 +50,27 @@ def test_people_unset_user_command_exists() -> None:
     assert "system user" in result.stdout
 
 
+def test_people_embeddings_group_exists() -> None:
+    result = runner.invoke(app, ["people", "embeddings", "--help"])
+
+    assert result.exit_code == 0
+    assert "voice embeddings" in result.stdout
+
+
+def test_people_embeddings_status_command_exists() -> None:
+    result = runner.invoke(app, ["people", "embeddings", "status", "--help"])
+
+    assert result.exit_code == 0
+    assert "embedding coverage" in result.stdout
+
+
+def test_people_embeddings_backfill_command_exists() -> None:
+    result = runner.invoke(app, ["people", "embeddings", "backfill", "--help"])
+
+    assert result.exit_code == 0
+    assert "missing voice embeddings" in result.stdout
+
+
 def test_meetings_group_exists() -> None:
     result = runner.invoke(app, ["meetings", "--help"])
 
@@ -85,11 +106,32 @@ def test_speakers_review_command_exists() -> None:
     assert "Interactively review unknown speakers" in result.stdout
 
 
-def test_reanalyze_speakers_supports_include_known_flag() -> None:
-    result = runner.invoke(app, ["reanalyze", "speakers", "--help"])
+def test_refresh_group_exists() -> None:
+    result = runner.invoke(app, ["refresh", "--help"])
+
+    assert result.exit_code == 0
+    assert "Refresh derived meeting outputs" in result.stdout
+
+
+def test_refresh_speakers_supports_include_known_flag() -> None:
+    result = runner.invoke(app, ["refresh", "speakers", "--help"])
 
     assert result.exit_code == 0
     assert "include-known-speakers" in result.stdout
+
+
+def test_refresh_stale_meetings_command_exists() -> None:
+    result = runner.invoke(app, ["refresh", "stale-meetings", "--help"])
+
+    assert result.exit_code == 0
+    assert "stale derived outputs" in result.stdout
+
+
+def test_refresh_meeting_command_exists() -> None:
+    result = runner.invoke(app, ["refresh", "meeting", "--help"])
+
+    assert result.exit_code == 0
+    assert "one meeting" in result.stdout
 
 
 def test_speakers_review_quit_still_prompts_for_refresh(monkeypatch) -> None:

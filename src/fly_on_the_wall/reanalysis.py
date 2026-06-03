@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from sqlite3 import Connection
 
 from fly_on_the_wall.meetings import get_meeting
@@ -34,7 +35,31 @@ def list_stale_stages(connection: Connection) -> list[dict]:
     return [dict(row) for row in rows]
 
 
-def rerun_speaker_matching(connection: Connection, meeting_id_or_slug: str) -> int:
+def list_stale_meetings(connection: Connection) -> list[dict]:
+    stages = list_stale_stages(connection)
+    seen: set[str] = set()
+    meetings: list[dict] = []
+    for stage in stages:
+        if stage["meeting_id"] in seen:
+            continue
+        seen.add(stage["meeting_id"])
+        meetings.append(
+            {
+                "meeting_id": stage["meeting_id"],
+                "meeting_slug": stage["meeting_slug"],
+            }
+        )
+    return meetings
+
+
+ProgressCallback = Callable[[str], None]
+
+
+def rerun_speaker_matching(
+    connection: Connection,
+    meeting_id_or_slug: str,
+    progress: ProgressCallback | None = None,
+) -> int:
     meeting = get_meeting(connection, meeting_id_or_slug)
     if meeting is None:
         raise ValueError(f"Meeting not found: {meeting_id_or_slug}")
@@ -51,6 +76,8 @@ def rerun_speaker_matching(connection: Connection, meeting_id_or_slug: str) -> i
     if provider_run is None:
         raise ValueError(f"No completed provider run found for meeting: {meeting_id_or_slug}")
 
+    if progress is not None:
+        progress(f"Embedding and matching speakers for {meeting['slug']}")
     before = _speaker_assignment_snapshot(connection, provider_run["id"])
     match_provider_run_speakers(connection, provider_run["id"])
     after = _speaker_assignment_snapshot(connection, provider_run["id"])
@@ -58,12 +85,23 @@ def rerun_speaker_matching(connection: Connection, meeting_id_or_slug: str) -> i
 
 
 def rerun_speaker_matching_for_meetings(
-    connection: Connection, include_known_speakers: bool = False
+    connection: Connection,
+    include_known_speakers: bool = False,
+    progress: ProgressCallback | None = None,
 ) -> list[dict]:
     results: list[dict] = []
-    for meeting in _speaker_reanalysis_meetings(connection, include_known_speakers):
-        changed_count = rerun_speaker_matching(connection, meeting["id"])
+    meetings = _speaker_reanalysis_meetings(connection, include_known_speakers)
+    if progress is not None:
+        progress(f"Found {len(meetings)} meeting(s) for speaker refresh")
+    for index, meeting in enumerate(meetings, start=1):
+        if progress is not None:
+            progress(f"Refreshing speaker matching for {meeting['slug']} ({index}/{len(meetings)})")
+        changed_count = rerun_speaker_matching(connection, meeting["id"], progress)
         stages = mark_speaker_reanalysis_stale(connection, meeting["id"]) if changed_count else []
+        if progress is not None:
+            progress(
+                f"{meeting['slug']}: {changed_count} speaker assignment change(s)"
+            )
         results.append(
             {
                 "meeting_id": meeting["id"],

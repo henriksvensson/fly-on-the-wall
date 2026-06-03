@@ -73,8 +73,9 @@ fot speakers review --meeting <meeting-id>
 fot speakers unknown
 fot speakers assign <unknown-id> --person "Person B"
 fot speakers create-person <unknown-id> --name "Person B"
-fot reanalyze speakers <meeting-id>
-fot reanalyze stale
+fot refresh speakers <meeting-id>
+fot refresh stale-meetings
+fot refresh meeting <meeting-id>
 fot export <meeting-id>
 fot status <meeting-id>
 fot doctor
@@ -237,12 +238,12 @@ Options:
 - Keep assignment history lightly rather than only storing the latest value.
 - Corrections may create new people and new voice samples.
 
-## Reanalysis And Staleness
+## Refresh And Staleness
 
 - Adding a new person or voice sample should not automatically reanalyze all old meetings.
 - Instead, mark affected downstream stages as stale.
-- Provide commands to reanalyze selected meetings or stale meetings.
-- Reanalysis should avoid expensive stages when cached artifacts are sufficient.
+- Provide commands to refresh speaker matching, selected meetings, or stale meetings.
+- Refresh should avoid expensive stages when cached artifacts are sufficient.
 
 Examples:
 

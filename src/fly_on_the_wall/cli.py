@@ -32,6 +32,10 @@ from fly_on_the_wall.people import (
     set_user_person,
     unset_user_person,
 )
+from fly_on_the_wall.people_embeddings import (
+    backfill_people_embeddings,
+    people_embedding_status,
+)
 from fly_on_the_wall.processing import process_audio, refresh_meeting
 from fly_on_the_wall.publishing import (
     add_publish_target,
@@ -42,6 +46,7 @@ from fly_on_the_wall.publishing import (
     set_publish_target_enabled,
 )
 from fly_on_the_wall.reanalysis import (
+    list_stale_meetings,
     list_stale_stages,
     mark_speaker_reanalysis_stale,
     rerun_speaker_matching,
@@ -82,18 +87,22 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 people_app = typer.Typer(help="Manage known people.", no_args_is_help=True)
+people_embeddings_app = typer.Typer(
+    help="Manage known people's voice embeddings.", no_args_is_help=True
+)
 meetings_app = typer.Typer(help="Inspect meetings.", no_args_is_help=True)
 speakers_app = typer.Typer(help="Review and assign speakers.", no_args_is_help=True)
-reanalyze_app = typer.Typer(help="Mark and inspect stale analysis.", no_args_is_help=True)
+refresh_app = typer.Typer(help="Refresh derived meeting outputs.", no_args_is_help=True)
 secrets_app = typer.Typer(help="Manage API keys in the OS keyring.", no_args_is_help=True)
 watch_app = typer.Typer(help="Process audio from watched folders.", no_args_is_help=True)
 watch_folders_app = typer.Typer(help="Manage watched folders.", no_args_is_help=True)
 publish_app = typer.Typer(help="Publish meetings to external targets.", no_args_is_help=True)
 publish_targets_app = typer.Typer(help="Manage publish targets.", no_args_is_help=True)
 app.add_typer(people_app, name="people")
+people_app.add_typer(people_embeddings_app, name="embeddings")
 app.add_typer(meetings_app, name="meetings")
 app.add_typer(speakers_app, name="speakers")
-app.add_typer(reanalyze_app, name="reanalyze")
+app.add_typer(refresh_app, name="refresh")
 app.add_typer(secrets_app, name="secrets")
 app.add_typer(watch_app, name="watch")
 watch_app.add_typer(watch_folders_app, name="folders")
@@ -703,7 +712,7 @@ def speakers_assign(local_speaker_id: str, person: str) -> None:
     with database() as connection:
         assignment = assign_speaker_to_person(connection, local_speaker_id, person)
     console.print(f"Assigned {assignment['local_speaker_id']} to {assignment['name']}")
-    console.print("Next: fot reanalyze speakers <meeting>")
+    console.print("Next: fot refresh speakers <meeting>")
 
 
 @speakers_app.command("create-person")
@@ -712,26 +721,30 @@ def speakers_create_person(local_speaker_id: str, name: str) -> None:
     with database() as connection:
         assignment = create_person_from_speaker(connection, local_speaker_id, name)
     console.print(f"Created and assigned {assignment['name']}")
-    console.print("Next: fot reanalyze speakers <meeting>")
+    console.print("Next: fot refresh speakers <meeting>")
 
 
-@reanalyze_app.command("speakers")
-def reanalyze_speakers(
+@refresh_app.command("speakers")
+def refresh_speakers(
     meeting: Annotated[str | None, typer.Argument(help="Optional meeting ID or slug.")] = None,
     include_known_speakers: Annotated[
         bool,
         typer.Option(
             "--include-known-speakers",
-            help="Also reanalyze meetings where all speakers are already known.",
+            help="Also refresh speaker matching for meetings where all speakers are already known.",
         ),
     ] = False,
 ) -> None:
-    """Rerun speaker matching and mark downstream speaker stages stale."""
+    """Refresh speaker matching and mark downstream outputs stale."""
     with database() as connection:
         if meeting is None:
-            results = rerun_speaker_matching_for_meetings(connection, include_known_speakers)
+            results = rerun_speaker_matching_for_meetings(
+                connection,
+                include_known_speakers,
+                progress=lambda message: console.print(f"-> {message}"),
+            )
             if not results:
-                console.print("No meetings found for speaker reanalysis.")
+                console.print("No meetings found for speaker refresh.")
                 return
             table = Table(title="Speaker Reanalysis")
             table.add_column("Meeting")
@@ -739,16 +752,20 @@ def reanalyze_speakers(
             for result in results:
                 table.add_row(result["meeting_slug"], str(result["match_count"]))
             console.print(table)
-            console.print(f"Reanalyzed meetings: {len(results)}")
+            console.print(f"Speaker matching refreshed for meetings: {len(results)}")
             changed = sum(1 for result in results if result["match_count"])
             if changed:
-                console.print("Next: refresh meetings with new speaker matches to update exports.")
+                console.print("Next: fot refresh stale-meetings")
             else:
                 console.print("No speaker assignment changes; downstream stages left untouched.")
             return
 
         try:
-            match_count = rerun_speaker_matching(connection, meeting)
+            match_count = rerun_speaker_matching(
+                connection,
+                meeting,
+                progress=lambda message: console.print(f"-> {message}"),
+            )
         except RuntimeError as exc:
             console.print(f"Speaker matching skipped: {exc}")
             match_count = 0
@@ -760,14 +777,71 @@ def reanalyze_speakers(
         console.print("No speaker assignment changes; downstream stages left untouched.")
 
 
-@reanalyze_app.command("stale")
-def reanalyze_stale() -> None:
-    """List stale stages that should be rerun."""
+@refresh_app.command("stale-meetings")
+def refresh_stale_meetings(
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="List stale meetings without refreshing them."),
+    ] = False,
+) -> None:
+    """Refresh all meetings with stale derived outputs."""
     with database() as connection:
-        stale = list_stale_stages(connection)
-    if not stale:
-        console.print("No stale stages found.")
-        return
+        stale_meetings = list_stale_meetings(connection)
+        if not stale_meetings:
+            console.print("No stale meetings found.")
+            return
+        if dry_run:
+            _print_stale_stages(connection)
+            return
+
+        config = load_config()
+        results: list[tuple[str, str, str]] = []
+        for stale_meeting in stale_meetings:
+            meeting_slug = stale_meeting["meeting_slug"]
+            try:
+                result = refresh_meeting(
+                    connection,
+                    meeting_slug,
+                    config,
+                    progress=lambda message: console.print(f"-> {message}"),
+                )
+            except (RecordingIgnoredError, ValueError) as exc:
+                console.print(f"Refresh failed for {meeting_slug}: {exc}")
+                results.append((meeting_slug, "failed", ""))
+                continue
+            results.append((result.meeting.slug, "refreshed", str(result.export.transcript_path)))
+
+    table = Table(title="Refresh Stale Meetings")
+    table.add_column("Meeting")
+    table.add_column("Status")
+    table.add_column("Transcript")
+    for meeting_slug, status, transcript_path in results:
+        table.add_row(meeting_slug, status, transcript_path)
+    console.print(table)
+
+
+@refresh_app.command("meeting")
+def refresh_meeting_command(meeting: str) -> None:
+    """Refresh derived outputs for one meeting."""
+    config = load_config()
+    with database() as connection:
+        try:
+            result = refresh_meeting(
+                connection,
+                meeting,
+                config,
+                progress=lambda message: console.print(f"-> {message}"),
+            )
+        except (RecordingIgnoredError, ValueError) as exc:
+            console.print(str(exc))
+            raise typer.Exit(code=1) from exc
+    console.print(f"Refreshed {result.meeting.slug}")
+    console.print(f"Transcript: {result.export.transcript_path}")
+    console.print(f"Analysis: {result.export.analysis_path}")
+
+
+def _print_stale_stages(connection) -> None:
+    stale = list_stale_stages(connection)
     table = Table(title="Stale Stages")
     table.add_column("Meeting")
     table.add_column("Stage")
@@ -883,6 +957,43 @@ def people_voice_samples(person: str) -> None:
     console.print(table)
 
 
+@people_embeddings_app.command("status")
+def people_embeddings_status() -> None:
+    """Show voice embedding coverage for known people."""
+    with database() as connection:
+        status = people_embedding_status(connection)
+
+    table = Table(title="People Voice Embeddings")
+    table.add_column("Metric")
+    table.add_column("Value")
+    table.add_row("People", str(status.people))
+    table.add_row("Voice samples", str(status.voice_samples))
+    table.add_row("Embedded voice samples", str(status.embedded_voice_samples))
+    table.add_row(
+        "Missing voice sample embeddings",
+        str(status.missing_voice_sample_embeddings),
+    )
+    console.print(table)
+
+
+@people_embeddings_app.command("backfill")
+def people_embeddings_backfill() -> None:
+    """Create missing voice embeddings for known people."""
+    try:
+        with database() as connection:
+            result = backfill_people_embeddings(connection)
+    except RuntimeError as exc:
+        console.print(str(exc))
+        raise typer.Exit(code=1) from exc
+
+    console.print(
+        f"People voice embedding backfill complete: {result.embedded} embedded, "
+        f"{result.failed} failed."
+    )
+    if result.embedded:
+        console.print("Next: fot refresh speakers")
+
+
 def _try_embedding_backend() -> EmbeddingBackend | None:
     try:
         return PyannoteEmbeddingBackend()
@@ -930,7 +1041,7 @@ def _speaker_review_follow_up(connection, changed_meetings: set[str]) -> set[str
     console.print(f"Speaker review changed {len(changed_meetings)} meeting(s).")
     while True:
         action = typer.prompt(
-            "Next [a=refresh affected, g=reanalyze unknown speakers globally, n=do nothing]",
+            "Next [a=refresh affected, g=refresh speaker matching globally, n=do nothing]",
             default="a",
         ).strip().lower()
         if action == "a":
@@ -941,11 +1052,11 @@ def _speaker_review_follow_up(connection, changed_meetings: set[str]) -> set[str
             if not changed_results:
                 console.print("No new speaker matches found in other meetings.")
                 return set(changed_meetings)
-            reanalyzed = {result["meeting_slug"] for result in changed_results}
-            console.print(f"Reanalyzed meetings with new speaker matches: {len(reanalyzed)}")
-            return set(changed_meetings) | reanalyzed
+            refreshed = {result["meeting_slug"] for result in changed_results}
+            console.print(f"Refreshed speaker matching with new matches: {len(refreshed)}")
+            return set(changed_meetings) | refreshed
         if action == "n":
-            console.print("Refresh skipped. You can run reanalysis or refresh later.")
+            console.print("Refresh skipped. You can run refresh later.")
             return set()
         console.print("Choose a, g, or n.")
 
