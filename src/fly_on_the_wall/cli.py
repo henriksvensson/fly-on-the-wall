@@ -45,6 +45,7 @@ from fly_on_the_wall.reanalysis import (
     list_stale_stages,
     mark_speaker_reanalysis_stale,
     rerun_speaker_matching,
+    rerun_speaker_matching_for_meetings,
 )
 from fly_on_the_wall.recording_quality import RecordingIgnoredError
 from fly_on_the_wall.secrets import (
@@ -679,21 +680,21 @@ def speakers_review(
                     break
                 console.print("Unknown action.")
 
-        if changed_meetings and typer.confirm(
-            "Refresh exports for affected meetings now?", default=True
-        ):
-            config = load_config()
-            for meeting_slug in sorted(changed_meetings):
-                result = refresh_meeting(
-                    connection,
-                    meeting_slug,
-                    config,
-                    embedding_backend=backend,
-                    progress=lambda message: console.print(f"-> {message}"),
-                )
-                console.print(f"Refreshed {result.meeting.slug}")
-                console.print(f"Transcript: {result.export.transcript_path}")
-                console.print(f"Analysis: {result.export.analysis_path}")
+        if changed_meetings:
+            refresh_meetings = _speaker_review_follow_up(connection, changed_meetings)
+            if refresh_meetings:
+                config = load_config()
+                for meeting_slug in sorted(refresh_meetings):
+                    result = refresh_meeting(
+                        connection,
+                        meeting_slug,
+                        config,
+                        embedding_backend=backend,
+                        progress=lambda message: console.print(f"-> {message}"),
+                    )
+                    console.print(f"Refreshed {result.meeting.slug}")
+                    console.print(f"Transcript: {result.export.transcript_path}")
+                    console.print(f"Analysis: {result.export.analysis_path}")
 
 
 @speakers_app.command("assign")
@@ -715,17 +716,48 @@ def speakers_create_person(local_speaker_id: str, name: str) -> None:
 
 
 @reanalyze_app.command("speakers")
-def reanalyze_speakers(meeting: str) -> None:
+def reanalyze_speakers(
+    meeting: Annotated[str | None, typer.Argument(help="Optional meeting ID or slug.")] = None,
+    include_known_speakers: Annotated[
+        bool,
+        typer.Option(
+            "--include-known-speakers",
+            help="Also reanalyze meetings where all speakers are already known.",
+        ),
+    ] = False,
+) -> None:
     """Rerun speaker matching and mark downstream speaker stages stale."""
     with database() as connection:
+        if meeting is None:
+            results = rerun_speaker_matching_for_meetings(connection, include_known_speakers)
+            if not results:
+                console.print("No meetings found for speaker reanalysis.")
+                return
+            table = Table(title="Speaker Reanalysis")
+            table.add_column("Meeting")
+            table.add_column("New Speaker Matches")
+            for result in results:
+                table.add_row(result["meeting_slug"], str(result["match_count"]))
+            console.print(table)
+            console.print(f"Reanalyzed meetings: {len(results)}")
+            changed = sum(1 for result in results if result["match_count"])
+            if changed:
+                console.print("Next: refresh meetings with new speaker matches to update exports.")
+            else:
+                console.print("No speaker assignment changes; downstream stages left untouched.")
+            return
+
         try:
             match_count = rerun_speaker_matching(connection, meeting)
         except RuntimeError as exc:
             console.print(f"Speaker matching skipped: {exc}")
             match_count = 0
-        stages = mark_speaker_reanalysis_stale(connection, meeting)
-    console.print(f"Matched speakers: {match_count}")
-    console.print(f"Marked stale: {', '.join(stages)}")
+        stages = mark_speaker_reanalysis_stale(connection, meeting) if match_count else []
+    console.print(f"New speaker matches: {match_count}")
+    if stages:
+        console.print(f"Marked stale: {', '.join(stages)}")
+    else:
+        console.print("No speaker assignment changes; downstream stages left untouched.")
 
 
 @reanalyze_app.command("stale")
@@ -892,6 +924,30 @@ def _set_publish_target_enabled_command(identifier: str, enabled: bool) -> None:
         raise typer.Exit(code=1)
     state = "Enabled" if enabled else "Disabled"
     console.print(f"{state} publish target {target.name}")
+
+
+def _speaker_review_follow_up(connection, changed_meetings: set[str]) -> set[str]:
+    console.print(f"Speaker review changed {len(changed_meetings)} meeting(s).")
+    while True:
+        action = typer.prompt(
+            "Next [a=refresh affected, g=reanalyze unknown speakers globally, n=do nothing]",
+            default="a",
+        ).strip().lower()
+        if action == "a":
+            return set(changed_meetings)
+        if action == "g":
+            results = rerun_speaker_matching_for_meetings(connection)
+            changed_results = [result for result in results if result["match_count"]]
+            if not changed_results:
+                console.print("No new speaker matches found in other meetings.")
+                return set(changed_meetings)
+            reanalyzed = {result["meeting_slug"] for result in changed_results}
+            console.print(f"Reanalyzed meetings with new speaker matches: {len(reanalyzed)}")
+            return set(changed_meetings) | reanalyzed
+        if action == "n":
+            console.print("Refresh skipped. You can run reanalysis or refresh later.")
+            return set()
+        console.print("Choose a, g, or n.")
 
 
 def _select_person(connection) -> Person | None:

@@ -85,6 +85,13 @@ def test_speakers_review_command_exists() -> None:
     assert "Interactively review unknown speakers" in result.stdout
 
 
+def test_reanalyze_speakers_supports_include_known_flag() -> None:
+    result = runner.invoke(app, ["reanalyze", "speakers", "--help"])
+
+    assert result.exit_code == 0
+    assert "include-known-speakers" in result.stdout
+
+
 def test_speakers_review_quit_still_prompts_for_refresh(monkeypatch) -> None:
     @contextmanager
     def fake_database():
@@ -94,8 +101,7 @@ def test_speakers_review_quit_still_prompts_for_refresh(monkeypatch) -> None:
         {"id": "speaker-1", "meeting_slug": "intro", "label": "speaker_0"},
         {"id": "speaker-2", "meeting_slug": "intro", "label": "speaker_1"},
     ]
-    actions = iter(["u", "q"])
-    confirm_calls = []
+    actions = iter(["u", "q", "n"])
 
     monkeypatch.setattr(cli, "database", fake_database)
     monkeypatch.setattr(cli, "list_unknown_speakers", lambda connection, meeting=None: speakers)
@@ -104,18 +110,25 @@ def test_speakers_review_quit_still_prompts_for_refresh(monkeypatch) -> None:
     monkeypatch.setattr(cli, "mark_unknown", lambda connection, speaker_id: None)
     monkeypatch.setattr(cli.typer, "prompt", lambda *args, **kwargs: next(actions))
 
-    def fake_confirm(message, default=True):
-        confirm_calls.append((message, default))
-        return False
-
-    monkeypatch.setattr(cli.typer, "confirm", fake_confirm)
-
     result = runner.invoke(app, ["speakers", "review"])
 
     assert result.exit_code == 0
     assert "Review cancelled." in result.stdout
-    assert len(confirm_calls) == 1
-    assert confirm_calls[0][0] == "Refresh exports for affected meetings now?"
+    assert "Speaker review changed 1 meeting(s)." in result.stdout
+    assert "Refresh skipped." in result.stdout
+
+
+def test_speaker_review_follow_up_can_reanalyze_unknown_speakers(monkeypatch) -> None:
+    monkeypatch.setattr(cli.typer, "prompt", lambda *args, **kwargs: "g")
+    monkeypatch.setattr(
+        cli,
+        "rerun_speaker_matching_for_meetings",
+        lambda connection: [{"meeting_slug": "other", "match_count": 1}],
+    )
+
+    refresh_meetings = cli._speaker_review_follow_up(object(), {"intro"})
+
+    assert refresh_meetings == {"intro", "other"}
 
 
 def test_secrets_group_exists() -> None:

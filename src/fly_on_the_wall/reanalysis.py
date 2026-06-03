@@ -51,5 +51,92 @@ def rerun_speaker_matching(connection: Connection, meeting_id_or_slug: str) -> i
     if provider_run is None:
         raise ValueError(f"No completed provider run found for meeting: {meeting_id_or_slug}")
 
-    matches = match_provider_run_speakers(connection, provider_run["id"])
-    return len(matches)
+    before = _speaker_assignment_snapshot(connection, provider_run["id"])
+    match_provider_run_speakers(connection, provider_run["id"])
+    after = _speaker_assignment_snapshot(connection, provider_run["id"])
+    return _changed_assignment_count(before, after)
+
+
+def rerun_speaker_matching_for_meetings(
+    connection: Connection, include_known_speakers: bool = False
+) -> list[dict]:
+    results: list[dict] = []
+    for meeting in _speaker_reanalysis_meetings(connection, include_known_speakers):
+        changed_count = rerun_speaker_matching(connection, meeting["id"])
+        stages = mark_speaker_reanalysis_stale(connection, meeting["id"]) if changed_count else []
+        results.append(
+            {
+                "meeting_id": meeting["id"],
+                "meeting_slug": meeting["slug"],
+                "match_count": changed_count,
+                "marked_stale": stages,
+            }
+        )
+    return results
+
+
+def _speaker_reanalysis_meetings(
+    connection: Connection, include_known_speakers: bool
+) -> list[dict]:
+    if include_known_speakers:
+        rows = connection.execute(
+            """
+            SELECT DISTINCT meetings.id, meetings.slug
+            FROM meetings
+            JOIN provider_runs ON provider_runs.meeting_id = meetings.id
+            WHERE provider_runs.status = 'done'
+            ORDER BY meetings.created_at DESC
+            """
+        ).fetchall()
+    else:
+        rows = connection.execute(
+            """
+            SELECT DISTINCT meetings.id, meetings.slug
+            FROM meetings
+            JOIN provider_runs ON provider_runs.meeting_id = meetings.id
+            JOIN local_speakers ON local_speakers.meeting_id = meetings.id
+            LEFT JOIN speaker_assignments
+                ON speaker_assignments.local_speaker_id = local_speakers.id
+            WHERE provider_runs.status = 'done'
+              AND (speaker_assignments.id IS NULL OR speaker_assignments.status = 'unknown')
+            ORDER BY meetings.created_at DESC
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def _speaker_assignment_snapshot(
+    connection: Connection, provider_run_id: str
+) -> dict[str, tuple]:
+    rows = connection.execute(
+        """
+        SELECT local_speakers.id AS local_speaker_id,
+               speaker_assignments.person_id,
+               speaker_assignments.status,
+               speaker_assignments.confidence,
+               speaker_assignments.margin,
+               speaker_assignments.evidence_json
+        FROM local_speakers
+        LEFT JOIN speaker_assignments
+            ON speaker_assignments.local_speaker_id = local_speakers.id
+        WHERE local_speakers.provider_run_id = ?
+        ORDER BY local_speakers.id
+        """,
+        (provider_run_id,),
+    ).fetchall()
+    return {
+        row["local_speaker_id"]: (
+            row["person_id"],
+            row["status"],
+            row["confidence"],
+            row["margin"],
+            row["evidence_json"],
+        )
+        for row in rows
+    }
+
+
+def _changed_assignment_count(before: dict[str, tuple], after: dict[str, tuple]) -> int:
+    return sum(
+        1 for speaker_id, assignment in after.items() if before.get(speaker_id) != assignment
+    )
