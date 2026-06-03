@@ -127,9 +127,12 @@ def scan_watch_folders(
         for audio_path in _audio_files(folder.path):
             seen += 1
             stat = audio_path.stat()
+            was_seen_unchanged = _item_seen_unchanged(
+                connection, audio_path, stat.st_size, stat.st_mtime_ns
+            )
             _upsert_seen_item(connection, folder.id, audio_path, stat.st_size, stat.st_mtime_ns)
 
-            if now - stat.st_mtime < stable_age_seconds:
+            if not was_seen_unchanged and now - stat.st_mtime < stable_age_seconds:
                 skipped += 1
                 _report(progress, f"Skipping recently modified file {audio_path}")
                 continue
@@ -241,6 +244,17 @@ def _item_final_for_current_file(
     return bool(
         item is not None
         and item["status"] in {"done", "ignored"}
+        and item["size_bytes"] == size_bytes
+        and item["mtime_ns"] == mtime_ns
+    )
+
+
+def _item_seen_unchanged(
+    connection: Connection, path: Path, size_bytes: int, mtime_ns: int
+) -> bool:
+    item = _watch_item(connection, path)
+    return bool(
+        item is not None
         and item["size_bytes"] == size_bytes
         and item["mtime_ns"] == mtime_ns
     )

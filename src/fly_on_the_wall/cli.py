@@ -23,7 +23,15 @@ from fly_on_the_wall.meetings import (
     meeting_stage_status,
     rename_meeting,
 )
-from fly_on_the_wall.people import Person, create_person, get_person, list_people
+from fly_on_the_wall.people import (
+    Person,
+    create_person,
+    get_person,
+    get_user_person,
+    list_people,
+    set_user_person,
+    unset_user_person,
+)
 from fly_on_the_wall.processing import process_audio, refresh_meeting
 from fly_on_the_wall.publishing import (
     add_publish_target,
@@ -572,6 +580,7 @@ def speakers_review(
     """Interactively review unknown speakers."""
     backend: EmbeddingBackend | None = None
     changed_meetings: set[str] = set()
+    quit_review = False
     with database() as connection:
         speakers = list_unknown_speakers(connection, meeting)
 
@@ -580,6 +589,8 @@ def speakers_review(
             return
 
         for speaker in speakers:
+            if quit_review:
+                break
             console.print(f"Unknown speaker: {speaker['id']}")
             console.print(f"Meeting: {speaker['meeting_slug']}")
             console.print(f"Label: {speaker['label']}")
@@ -599,7 +610,7 @@ def speakers_review(
             while True:
                 action = typer.prompt(
                     "Action [p=play, a=assign+sample, n=name only, "
-                    "c=create person, u=unknown, s=skip]",
+                    "c=create person, u=unknown, s=skip, q=quit]",
                     default="p" if clip_path is not None else "s",
                 ).strip().lower()
                 if action == "p" and clip_path is not None:
@@ -661,6 +672,10 @@ def speakers_review(
                     break
                 if action == "s":
                     console.print("Skipped.")
+                    break
+                if action == "q":
+                    console.print("Review cancelled.")
+                    quit_review = True
                     break
                 console.print("Unknown action.")
 
@@ -750,9 +765,10 @@ def people_list() -> None:
 
     table = Table(title="People")
     table.add_column("Name")
+    table.add_column("User")
     table.add_column("ID")
     for person in people:
-        table.add_row(person.display_name, person.id)
+        table.add_row(person.display_name, "yes" if person.is_user else "", person.id)
     console.print(table)
 
 
@@ -767,7 +783,43 @@ def people_show(person: str) -> None:
         raise typer.Exit(code=1)
 
     console.print(f"Name: {found.display_name}")
+    console.print(f"User: {'yes' if found.is_user else 'no'}")
     console.print(f"ID: {found.id}")
+
+
+@people_app.command("set-user")
+def people_set_user(person: str) -> None:
+    """Mark one known person as the system user."""
+    with database() as connection:
+        try:
+            updated = set_user_person(connection, person)
+        except ValueError as exc:
+            console.print(str(exc))
+            raise typer.Exit(code=1) from exc
+    console.print(f"System user: {updated.display_name}")
+
+
+@people_app.command("show-user")
+def people_show_user() -> None:
+    """Show the person marked as the system user."""
+    with database() as connection:
+        person = get_user_person(connection)
+    if person is None:
+        console.print("No system user configured.")
+        return
+    console.print(f"System user: {person.display_name}")
+    console.print(f"ID: {person.id}")
+
+
+@people_app.command("unset-user")
+def people_unset_user() -> None:
+    """Clear the system user marker."""
+    with database() as connection:
+        person = unset_user_person(connection)
+    if person is None:
+        console.print("No system user configured.")
+        return
+    console.print(f"Cleared system user: {person.display_name}")
 
 
 @people_app.command("voice-samples")

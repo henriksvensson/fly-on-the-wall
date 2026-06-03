@@ -1,3 +1,5 @@
+import os
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -145,6 +147,44 @@ def test_scan_skips_recently_modified_audio_file(tmp_path: Path) -> None:
     assert result.processed == 0
     assert result.skipped == 1
     assert item["status"] == "pending"
+
+
+def test_scan_processes_future_mtime_file_after_unchanged_scan(tmp_path: Path) -> None:
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    audio_path = inbox / "future.mp3"
+    audio_path.write_bytes(b"audio")
+    future_timestamp = time.time() + 3600
+    os.utime(audio_path, (future_timestamp, future_timestamp))
+    calls = []
+
+    def fake_process(connection, path, title, config, storage=None, progress=None):
+        calls.append(path)
+        connection.execute(
+            "INSERT INTO meetings(id, slug, title, language) VALUES (?, ?, ?, ?)",
+            ("meeting-1", "future", "Future", "sv"),
+        )
+        return SimpleNamespace(meeting=SimpleNamespace(id="meeting-1"))
+
+    with database(tmp_path / "fly.db") as connection:
+        add_watch_folder(connection, inbox)
+        first = scan_watch_folders(
+            connection,
+            AppConfig(),
+            process_fn=fake_process,
+            stable_age_seconds=5,
+        )
+        second = scan_watch_folders(
+            connection,
+            AppConfig(),
+            process_fn=fake_process,
+            stable_age_seconds=5,
+        )
+
+    assert first.skipped == 1
+    assert first.processed == 0
+    assert second.processed == 1
+    assert calls == [audio_path]
 
 
 def test_scan_records_processing_failures(tmp_path: Path) -> None:

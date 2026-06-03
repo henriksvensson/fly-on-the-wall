@@ -1,5 +1,8 @@
+from contextlib import contextmanager
+
 from typer.testing import CliRunner
 
+import fly_on_the_wall.cli as cli
 from fly_on_the_wall.cli import app
 
 runner = CliRunner()
@@ -24,6 +27,27 @@ def test_people_group_exists() -> None:
 
     assert result.exit_code == 0
     assert "Manage known people" in result.stdout
+
+
+def test_people_set_user_command_exists() -> None:
+    result = runner.invoke(app, ["people", "set-user", "--help"])
+
+    assert result.exit_code == 0
+    assert "system user" in result.stdout
+
+
+def test_people_show_user_command_exists() -> None:
+    result = runner.invoke(app, ["people", "show-user", "--help"])
+
+    assert result.exit_code == 0
+    assert "system user" in result.stdout
+
+
+def test_people_unset_user_command_exists() -> None:
+    result = runner.invoke(app, ["people", "unset-user", "--help"])
+
+    assert result.exit_code == 0
+    assert "system user" in result.stdout
 
 
 def test_meetings_group_exists() -> None:
@@ -59,6 +83,39 @@ def test_speakers_review_command_exists() -> None:
 
     assert result.exit_code == 0
     assert "Interactively review unknown speakers" in result.stdout
+
+
+def test_speakers_review_quit_still_prompts_for_refresh(monkeypatch) -> None:
+    @contextmanager
+    def fake_database():
+        yield object()
+
+    speakers = [
+        {"id": "speaker-1", "meeting_slug": "intro", "label": "speaker_0"},
+        {"id": "speaker-2", "meeting_slug": "intro", "label": "speaker_1"},
+    ]
+    actions = iter(["u", "q"])
+    confirm_calls = []
+
+    monkeypatch.setattr(cli, "database", fake_database)
+    monkeypatch.setattr(cli, "list_unknown_speakers", lambda connection, meeting=None: speakers)
+    monkeypatch.setattr(cli, "speaker_examples", lambda connection, speaker_id, limit=1: [])
+    monkeypatch.setattr(cli, "prepare_speaker_review_clip", lambda connection, speaker_id: None)
+    monkeypatch.setattr(cli, "mark_unknown", lambda connection, speaker_id: None)
+    monkeypatch.setattr(cli.typer, "prompt", lambda *args, **kwargs: next(actions))
+
+    def fake_confirm(message, default=True):
+        confirm_calls.append((message, default))
+        return False
+
+    monkeypatch.setattr(cli.typer, "confirm", fake_confirm)
+
+    result = runner.invoke(app, ["speakers", "review"])
+
+    assert result.exit_code == 0
+    assert "Review cancelled." in result.stdout
+    assert len(confirm_calls) == 1
+    assert confirm_calls[0][0] == "Refresh exports for affected meetings now?"
 
 
 def test_secrets_group_exists() -> None:
