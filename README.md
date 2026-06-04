@@ -307,7 +307,13 @@ Implementation tasks live in:
 IMPLEMENTATION_TASKS.md
 ```
 
-Original proof-of-concept scripts and detailed notes live in:
+Detailed proof-of-concept results live in:
+
+```text
+PROOF_OF_CONCEPT_RESULTS.md
+```
+
+Original proof-of-concept scripts live in:
 
 ```text
 poc/
@@ -315,67 +321,12 @@ poc/
 
 ## Proof-Of-Concept Results
 
-The first experiments focused on Swedish meeting audio, transcription quality, diarization quality, and whether stable speaker identity could be recovered across recordings.
+Detailed anonymized proof-of-concept notes live in [`PROOF_OF_CONCEPT_RESULTS.md`](PROOF_OF_CONCEPT_RESULTS.md).
 
-### Transcription And Diarization Providers
+The main choices that came out of the proof of concept were:
 
-ElevenLabs Scribe v2 became the main baseline. It produced the best overall combination of readable Swedish transcription, coherent meeting context, and useful diarization. It was not perfect: in one important meeting it merged two recurring speakers into one diarization label. The conclusion was that ElevenLabs is strong for transcript content, but speaker separation still needs review and correction.
-
-Speechmatics was the diarization runner-up. Default-ish settings also merged the same recurring speakers, but higher speaker sensitivity over-split the meeting and separated some speakers that ElevenLabs merged. This made Speechmatics useful as a possible second diarization pass or diagnostic comparison, even though it was not selected as the main provider.
-
-Soniox produced strong wording on one early sample and was one of the better providers for transcription quality, but ElevenLabs and Speechmatics were stronger for speaker continuity in the tested workflow.
-
-Gladia produced usable diarization, but wording was weaker than the strongest providers.
-
-Deepgram was weaker on Swedish wording in early tests.
-
-OpenAI transcription was weaker on the tested Swedish clip. One diarized model hallucinated English, making it a poor fit for this specific transcription use case.
-
-Bee was not useful for this workflow. It identified one known speaker in some places, but most speakers remained `Unknown`, and transcript content was significantly weaker than ElevenLabs and Speechmatics on the tested Swedish meeting.
-
-Current provider ranking for this use case:
-
-1. ElevenLabs: best overall readable transcript and decent diarization.
-2. Speechmatics: useful diarization runner-up, especially with sensitivity tuning.
-3. Soniox: strong wording, less useful for speaker continuity.
-4. Gladia: usable but weaker wording.
-5. Deepgram, OpenAI transcription, Bee: weaker for the tested Swedish meeting scenario.
-
-### Speaker Identity
-
-Provider diarization labels are local to one recording. `speaker_1` in one meeting is not the same identity as `speaker_1` in another meeting.
-
-The speaker identity proof of concept used local voice embeddings from:
-
-```text
-pyannote/wespeaker-voxceleb-resnet34-LM
-```
-
-This model worked locally without requiring gated Hugging Face access.
-
-On the sample test, same-speaker scores were much higher than cross-speaker scores:
-
-```text
-speaker_0 -> speaker_0: 0.4721
-speaker_1 -> speaker_1: 0.7921
-speaker_2 -> speaker_2: 0.6278
-cross-speaker scores: roughly 0.0250 to 0.1594
-```
-
-The conclusion was that local embeddings are good enough to support recurring-speaker identity matching, especially when combined with human-confirmed voice samples.
-
-### Speaker Matching Lessons
-
-Using one averaged embedding per person can be brittle. In one test, adding a better voice sample for one known speaker improved matching significantly:
-
-- Before adding the better profile clip, one match scored around `0.638`.
-- After adding a longer confirmed voice sample, it improved to around `0.767`.
-- Using only the new voice sample in a temporary test improved it further to around `0.851`.
-
-The lesson was that multiple voice samples should be preserved and compared, not blindly averaged into one canonical voice profile.
-
-### Product Direction From The PoC
-
-The core product insight from the proof of concepts is that transcription, diarization, speaker identity, and readability are separate problems.
-
-Fly on the Wall treats them as separate pipeline stages so each one can be inspected, corrected, cached, and improved independently.
+- ElevenLabs Scribe v2 is the current default transcription provider because it gave the best overall balance of readable Swedish transcription and useful diarization.
+- Speechmatics was useful as a diarization comparison point, especially when sensitivity tuning over-split speakers that ElevenLabs merged.
+- Local speaker embeddings were promising enough to support recurring-speaker identity matching across recordings.
+- Human-confirmed voice samples materially improved speaker matching quality.
+- Transcription, diarization, speaker identity, and transcript readability should remain separate pipeline stages so each can be inspected and improved independently.
