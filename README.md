@@ -332,12 +332,6 @@ Detailed proof-of-concept results live in:
 PROOF_OF_CONCEPT_RESULTS.md
 ```
 
-Original proof-of-concept scripts live in:
-
-```text
-poc/
-```
-
 ## Proof-Of-Concept Results
 
 Detailed anonymized proof-of-concept notes live in [`PROOF_OF_CONCEPT_RESULTS.md`](PROOF_OF_CONCEPT_RESULTS.md).
