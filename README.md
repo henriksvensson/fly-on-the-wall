@@ -85,6 +85,14 @@ OPENAI_API_KEY
 
 ## Basic Usage
 
+Run the interactive setup wizard:
+
+```bash
+fot setup
+```
+
+It checks required dependencies, helps store API keys, sets your user identity, and can configure Obsidian publishing and watched folders.
+
 Process one recording:
 
 ```bash

@@ -67,6 +67,7 @@ Current command shape:
 
 ```bash
 fot process <audio>
+fot setup
 fot doctor
 
 fot meetings list

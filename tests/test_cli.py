@@ -3,7 +3,9 @@ from contextlib import contextmanager
 from typer.testing import CliRunner
 
 import fly_on_the_wall.cli_speaker_review as cli_speaker_review
+import fly_on_the_wall.setup as setup_wizard
 from fly_on_the_wall.cli import app
+from fly_on_the_wall.doctor import DoctorCheck
 
 runner = CliRunner()
 
@@ -20,6 +22,51 @@ def test_people_group_exists() -> None:
 
     assert result.exit_code == 0
     assert "Manage known people" in result.stdout
+
+
+def test_setup_command_exists() -> None:
+    result = runner.invoke(app, ["setup", "--help"])
+
+    assert result.exit_code == 0
+    assert "first-run setup" in result.stdout
+
+
+def test_setup_can_skip_optional_configuration(monkeypatch, tmp_path) -> None:
+    @contextmanager
+    def fake_database():
+        yield object()
+
+    monkeypatch.setattr(
+        setup_wizard,
+        "run_checks",
+        lambda: [
+            DoctorCheck("python", True, "3.12.0"),
+            DoctorCheck("ffmpeg", True, "/usr/bin/ffmpeg"),
+            DoctorCheck("elevenlabs api key", False, "missing"),
+        ],
+    )
+    monkeypatch.setattr(setup_wizard, "which", lambda command: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(setup_wizard, "database", fake_database)
+    monkeypatch.setattr(setup_wizard, "get_user_person", lambda connection: None)
+    monkeypatch.setattr(setup_wizard, "list_publish_targets", lambda connection: [])
+    monkeypatch.setattr(setup_wizard, "list_watch_folders", lambda connection: [])
+    monkeypatch.setattr(setup_wizard, "_module_available", lambda module_name: False)
+    monkeypatch.setattr(setup_wizard, "storage_paths", lambda: type("Paths", (), {"root": tmp_path})())
+    monkeypatch.setattr(
+        setup_wizard,
+        "get_api_key_status",
+        lambda provider: type(
+            "Status",
+            (),
+            {"available": False, "source": "missing", "env_var": f"{provider.upper()}_API_KEY"},
+        )(),
+    )
+
+    result = runner.invoke(app, ["setup"], input="n\nn\nn\nn\nn\nn\n")
+
+    assert result.exit_code == 0
+    assert "Setup summary" in result.stdout
+    assert "Required setup: incomplete" in result.stdout
 
 
 def test_people_set_user_command_exists() -> None:

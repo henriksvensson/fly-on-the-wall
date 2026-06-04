@@ -50,6 +50,7 @@ from fly_on_the_wall.secrets import (
     remove_api_key,
     set_api_key,
 )
+from fly_on_the_wall.setup import run_setup
 from fly_on_the_wall.speakers import (
     assign_speaker_to_person,
     list_unknown_speakers,
@@ -101,6 +102,12 @@ def main(
     ),
 ) -> None:
     """Run Fly on the Wall commands."""
+
+
+@app.command()
+def setup() -> None:
+    """Interactively configure first-run setup."""
+    run_setup(console)
 
 
 @app.command()
