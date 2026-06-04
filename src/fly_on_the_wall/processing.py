@@ -23,8 +23,11 @@ from fly_on_the_wall.meetings import (
 from fly_on_the_wall.normalization import normalize_provider_run
 from fly_on_the_wall.providers.elevenlabs import run_transcription
 from fly_on_the_wall.providers.openai_analysis import (
+    AnalysisRequest,
     DEFAULT_ANALYSIS_MODEL,
     OpenAIAnalysisError,
+    OpenAIRequestOptions,
+    TitleRequest,
     analyze_meeting,
     fallback_analysis,
     suggest_meeting_title,
@@ -60,6 +63,23 @@ class ProcessResult:
     export: ExportResult
 
 
+@dataclass(frozen=True)
+class RefreshContext:
+    connection: Connection
+    meeting: Meeting
+    config: AppConfig
+    paths: StoragePaths
+    description: str | None
+    embedding_backend: EmbeddingBackend | None
+    progress: "TimedProgress"
+
+
+@dataclass(frozen=True)
+class TranscriptArtifacts:
+    deterministic: str
+    cleaned: str
+
+
 def process_audio(
     connection: Connection,
     audio_path: Path,
@@ -93,16 +113,10 @@ def process_audio(
     else:
         timed_progress.message("Reusing completed ElevenLabs transcription")
         provider_run_id = existing_provider_run["id"]
-    export = _refresh_provider_run(
-        connection,
-        meeting,
-        provider_run_id,
-        config,
-        paths,
-        description,
-        embedding_backend,
-        timed_progress,
+    context = RefreshContext(
+        connection, meeting, config, paths, description, embedding_backend, timed_progress
     )
+    export = _refresh_provider_run(context, provider_run_id)
     timed_progress.message(f"Done ({timed_progress.total_elapsed()})")
     return ProcessResult(_meeting_from_database(connection, meeting.id), provider_run_id, export)
 
@@ -136,101 +150,100 @@ def refresh_meeting(
     )
     timed_progress = TimedProgress(progress)
     timed_progress.message(f"Refreshing meeting {meeting.slug}")
-    export = _refresh_provider_run(
+    context = RefreshContext(
         connection,
         meeting,
-        provider_run["id"],
         config,
         paths,
         meeting_row.get("description"),
         embedding_backend,
         timed_progress,
     )
+    export = _refresh_provider_run(context, provider_run["id"])
     timed_progress.message(f"Done ({timed_progress.total_elapsed()})")
     return ProcessResult(_meeting_from_database(connection, meeting.id), provider_run["id"], export)
 
 
-def _refresh_provider_run(
-    connection: Connection,
-    meeting: Meeting,
-    provider_run_id: str,
-    config: AppConfig,
-    paths: StoragePaths,
-    description: str | None,
-    embedding_backend: EmbeddingBackend | None,
-    progress: TimedProgress,
-) -> ExportResult:
-    with progress.step("Normalizing transcript"):
-        segments = normalize_provider_run(connection, provider_run_id)
-    quality = assess_after_transcription(connection, meeting, segments)
-    store_recording_quality(connection, meeting.id, quality)
+def _refresh_provider_run(context: RefreshContext, provider_run_id: str) -> ExportResult:
+    with context.progress.step("Normalizing transcript"):
+        segments = normalize_provider_run(context.connection, provider_run_id)
+    quality = assess_after_transcription(context.connection, context.meeting, segments)
+    store_recording_quality(context.connection, context.meeting.id, quality)
     if quality.status in {"empty", "nonsense"}:
-        progress.message(f"Ignoring recording ({quality.reason})")
-        raise RecordingIgnoredError(meeting, quality)
+        context.progress.message(f"Ignoring recording ({quality.reason})")
+        raise RecordingIgnoredError(context.meeting, quality)
 
-    with progress.step("Matching speaker identities"):
+    with context.progress.step("Matching speaker identities"):
         try:
-            match_provider_run_speakers(connection, provider_run_id, embedding_backend, paths)
-        except RuntimeError as exc:
-            progress.message(f"Speaker identity matching skipped ({exc})")
-    with progress.step("Rendering named transcript"):
-        named_transcript = render_named_transcript(connection, provider_run_id, storage=paths)
-    with progress.step("Running deterministic cleanup"):
-        deterministic_transcript = deterministic_cleanup(named_transcript)
-    cleaned_transcript = deterministic_transcript
-
-    if config.cleanup_mode == "light" and get_api_key("openai"):
-        glossary_terms = load_glossary_terms(config.glossary_path)
-        cleanup_cache_key = text_sha256(
-            "\n".join(
-                [
-                    DEFAULT_CLEANUP_MODEL,
-                    CLEANUP_PROMPT_VERSION,
-                    description or "",
-                    "\n".join(glossary_terms),
-                    deterministic_transcript,
-                ]
+            match_provider_run_speakers(
+                context.connection,
+                provider_run_id,
+                context.embedding_backend,
+                context.paths,
             )
+        except RuntimeError as exc:
+            context.progress.message(f"Speaker identity matching skipped ({exc})")
+    with context.progress.step("Rendering named transcript"):
+        named_transcript = render_named_transcript(
+            context.connection, provider_run_id, storage=context.paths
         )
-        cleanup_cache_dir = paths.artifacts / meeting.id / "llm-cleanup"
-        cached_cleanup = read_cached_text(cleanup_cache_dir, cleanup_cache_key)
-        if cached_cleanup is not None:
-            progress.message("Reusing OpenAI light cleanup")
-            cleaned_transcript = cached_cleanup
-        else:
-            with progress.step("Running OpenAI light cleanup"):
-                try:
-                    cleaned_transcript = cleanup_transcript(
-                        deterministic_transcript,
-                        glossary_terms=glossary_terms,
-                        meeting_context=description,
-                        usage_callback=lambda response: record_openai_usage(
-                            connection,
-                            meeting_id=meeting.id,
-                            model=DEFAULT_CLEANUP_MODEL,
-                            service="cleanup",
-                            response=response,
-                        ),
-                    )
-                    write_cached_text(cleanup_cache_dir, cleanup_cache_key, cleaned_transcript)
-                except OpenAICleanupError as exc:
-                    progress.message(
-                        f"OpenAI cleanup failed; exporting deterministic cleanup ({exc})"
-                    )
+    with context.progress.step("Running deterministic cleanup"):
+        deterministic_transcript = deterministic_cleanup(named_transcript)
+    artifacts = _cleanup_transcript(context, deterministic_transcript)
+    analysis = _analyze_transcript(context, artifacts.cleaned)
+    _suggest_and_apply_title(context, artifacts.cleaned, analysis)
 
-    analysis = _analyze_transcript(
-        connection, paths, meeting.id, cleaned_transcript, description, progress
-    )
-    _suggest_and_apply_title(
-        connection, paths, meeting.id, cleaned_transcript, analysis, description, progress
-    )
-
-    with progress.step("Exporting markdown"):
+    with context.progress.step("Exporting markdown"):
         export = export_markdown_transcript(
-            connection, meeting.id, cleaned_transcript, analysis, paths
+            context.connection, context.meeting.id, artifacts.cleaned, analysis, context.paths
         )
-    _publish_enabled_targets(connection, meeting.id, progress)
+    _publish_enabled_targets(context.connection, context.meeting.id, context.progress)
     return export
+
+
+def _cleanup_transcript(context: RefreshContext, deterministic_transcript: str) -> TranscriptArtifacts:
+    if context.config.cleanup_mode != "light" or not get_api_key("openai"):
+        return TranscriptArtifacts(deterministic_transcript, deterministic_transcript)
+
+    glossary_terms = load_glossary_terms(context.config.glossary_path)
+    cleanup_cache_key = text_sha256(
+        "\n".join(
+            [
+                DEFAULT_CLEANUP_MODEL,
+                CLEANUP_PROMPT_VERSION,
+                context.description or "",
+                "\n".join(glossary_terms),
+                deterministic_transcript,
+            ]
+        )
+    )
+    cleanup_cache_dir = context.paths.artifacts / context.meeting.id / "llm-cleanup"
+    cached_cleanup = read_cached_text(cleanup_cache_dir, cleanup_cache_key)
+    if cached_cleanup is not None:
+        context.progress.message("Reusing OpenAI light cleanup")
+        return TranscriptArtifacts(deterministic_transcript, cached_cleanup)
+
+    with context.progress.step("Running OpenAI light cleanup"):
+        try:
+            cleaned_transcript = cleanup_transcript(
+                deterministic_transcript,
+                glossary_terms=glossary_terms,
+                meeting_context=context.description,
+                usage_callback=lambda response: record_openai_usage(
+                    context.connection,
+                    meeting_id=context.meeting.id,
+                    model=DEFAULT_CLEANUP_MODEL,
+                    service="cleanup",
+                    response=response,
+                ),
+            )
+            write_cached_text(cleanup_cache_dir, cleanup_cache_key, cleaned_transcript)
+            return TranscriptArtifacts(deterministic_transcript, cleaned_transcript)
+        except OpenAICleanupError as exc:
+            context.progress.message(
+                f"OpenAI cleanup failed; exporting deterministic cleanup ({exc})"
+            )
+            return TranscriptArtifacts(deterministic_transcript, deterministic_transcript)
 
 
 def _publish_enabled_targets(
@@ -246,54 +259,54 @@ def _publish_enabled_targets(
 
 
 def _suggest_and_apply_title(
-    connection: Connection,
-    storage: StoragePaths,
-    meeting_id: str,
+    context: RefreshContext,
     transcript: str,
     analysis: str,
-    description: str | None,
-    progress: TimedProgress,
 ) -> None:
     if not get_api_key("openai"):
         return
 
-    meeting = get_meeting(connection, meeting_id)
+    meeting = get_meeting(context.connection, context.meeting.id)
     if meeting is None:
-        raise ValueError(f"Meeting not found: {meeting_id}")
+        raise ValueError(f"Meeting not found: {context.meeting.id}")
 
     if meeting.get("title_source") == "manual":
         return
 
     title_cache_key = text_sha256(
-        "\n".join([DEFAULT_ANALYSIS_MODEL, description or "", transcript, analysis])
+        "\n".join([DEFAULT_ANALYSIS_MODEL, context.description or "", transcript, analysis])
     )
-    title_cache_dir = storage.artifacts / meeting_id / "generated-title"
+    title_cache_dir = context.paths.artifacts / context.meeting.id / "generated-title"
     cached_title = read_cached_text(title_cache_dir, title_cache_key)
     if cached_title is not None:
-        progress.message("Reusing generated meeting title")
+        context.progress.message("Reusing generated meeting title")
         generated_title = cached_title
     else:
-        with progress.step("Generating meeting title"):
+        with context.progress.step("Generating meeting title"):
             try:
                 generated_title = suggest_meeting_title(
-                    transcript,
-                    analysis,
-                    meeting_context=description,
-                    usage_callback=lambda response: record_openai_usage(
-                        connection,
-                        meeting_id=meeting_id,
-                        model=DEFAULT_ANALYSIS_MODEL,
-                        service="title",
-                        response=response,
+                    TitleRequest(
+                        transcript,
+                        analysis,
+                        meeting_context=context.description,
+                        options=OpenAIRequestOptions(
+                            usage_callback=lambda response: record_openai_usage(
+                                context.connection,
+                                meeting_id=context.meeting.id,
+                                model=DEFAULT_ANALYSIS_MODEL,
+                                service="title",
+                                response=response,
+                            )
+                        ),
                     ),
                 )
             except OpenAIAnalysisError as exc:
-                progress.message(f"Meeting title generation failed ({exc})")
+                context.progress.message(f"Meeting title generation failed ({exc})")
                 return
             write_cached_text(title_cache_dir, title_cache_key, generated_title)
 
     if generated_title.strip():
-        update_generated_title(connection, meeting_id, generated_title)
+        update_generated_title(context.connection, context.meeting.id, generated_title)
 
 
 def _run_elevenlabs_transcription(
@@ -388,40 +401,40 @@ def _format_elapsed(seconds: float) -> str:
 
 
 def _analyze_transcript(
-    connection: Connection,
-    storage: StoragePaths,
-    meeting_id: str,
+    context: RefreshContext,
     transcript: str,
-    description: str | None,
-    progress: TimedProgress,
 ) -> str:
     if not get_api_key("openai"):
         return fallback_analysis("OPENAI_API_KEY is missing")
 
     analysis_cache_key = text_sha256(
-        "\n".join([DEFAULT_ANALYSIS_MODEL, description or "", transcript])
+        "\n".join([DEFAULT_ANALYSIS_MODEL, context.description or "", transcript])
     )
-    analysis_cache_dir = storage.artifacts / meeting_id / "analysis"
+    analysis_cache_dir = context.paths.artifacts / context.meeting.id / "analysis"
     cached_analysis = read_cached_text(analysis_cache_dir, analysis_cache_key)
     if cached_analysis is not None:
-        progress.message("Reusing meeting analysis")
+        context.progress.message("Reusing meeting analysis")
         return cached_analysis
 
-    with progress.step("Analyzing meeting"):
+    with context.progress.step("Analyzing meeting"):
         try:
             analysis = analyze_meeting(
-                transcript,
-                meeting_context=description,
-                usage_callback=lambda response: record_openai_usage(
-                    connection,
-                    meeting_id=meeting_id,
-                    model=DEFAULT_ANALYSIS_MODEL,
-                    service="analysis",
-                    response=response,
+                AnalysisRequest(
+                    transcript,
+                    meeting_context=context.description,
+                    options=OpenAIRequestOptions(
+                        usage_callback=lambda response: record_openai_usage(
+                            context.connection,
+                            meeting_id=context.meeting.id,
+                            model=DEFAULT_ANALYSIS_MODEL,
+                            service="analysis",
+                            response=response,
+                        )
+                    ),
                 ),
             )
         except OpenAIAnalysisError as exc:
-            progress.message(f"Meeting analysis failed; exporting fallback analysis ({exc})")
+            context.progress.message(f"Meeting analysis failed; exporting fallback analysis ({exc})")
             return fallback_analysis(str(exc))
 
     write_cached_text(analysis_cache_dir, analysis_cache_key, analysis)

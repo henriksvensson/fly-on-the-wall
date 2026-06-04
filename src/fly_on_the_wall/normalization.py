@@ -75,27 +75,35 @@ def normalize_elevenlabs_response(response: dict[str, Any]) -> list[NormalizedSe
     normalized: list[NormalizedSegment] = []
     sequence = 0
     for transcript in _iter_transcripts(response):
-        language = transcript.get("language_code")
-        current_speaker: str | None = None
-        current_words: list[dict[str, Any]] = []
-
-        for word in transcript.get("words", []):
-            if word.get("type") == "audio_event":
+        for speaker_label, words in _speaker_word_groups(transcript.get("words", [])):
+            segment = _build_segment(
+                sequence, speaker_label, words, transcript.get("language_code")
+            )
+            if segment is None:
                 continue
-            speaker = word.get("speaker_id") or "Unknown"
-            if current_speaker is not None and speaker != current_speaker:
-                segment = _build_segment(sequence, current_speaker, current_words, language)
-                if segment is not None:
-                    normalized.append(segment)
-                    sequence += 1
-                current_words.clear()
-            current_speaker = speaker
-            current_words.append(word)
-        segment = _build_segment(sequence, current_speaker, current_words, language)
-        if segment is not None:
             normalized.append(segment)
             sequence += 1
     return normalized
+
+
+def _speaker_word_groups(words: list[dict[str, Any]]) -> list[tuple[str, list[dict[str, Any]]]]:
+    groups: list[tuple[str, list[dict[str, Any]]]] = []
+    current_speaker: str | None = None
+    current_words: list[dict[str, Any]] = []
+
+    for word in words:
+        if word.get("type") == "audio_event":
+            continue
+        speaker = word.get("speaker_id") or "Unknown"
+        if current_speaker is not None and speaker != current_speaker:
+            groups.append((current_speaker, current_words))
+            current_words = []
+        current_speaker = speaker
+        current_words.append(word)
+
+    if current_speaker is not None:
+        groups.append((current_speaker, current_words))
+    return groups
 
 
 def _build_segment(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass, field
 
 import httpx
 
@@ -14,37 +15,70 @@ class OpenAIAnalysisError(RuntimeError):
     """Raised when OpenAI meeting analysis fails."""
 
 
-def analyze_meeting(
-    transcript_markdown: str,
-    meeting_context: str | None = None,
-    model: str = DEFAULT_ANALYSIS_MODEL,
-    api_key: str | None = None,
-    client: httpx.Client | None = None,
-    usage_callback: Callable[[dict], None] | None = None,
-) -> str:
-    resolved_api_key = api_key or get_api_key("openai")
-    if not resolved_api_key:
-        raise OpenAIAnalysisError("Missing OPENAI_API_KEY.")
+@dataclass(frozen=True)
+class OpenAIRequestOptions:
+    model: str = DEFAULT_ANALYSIS_MODEL
+    api_key: str | None = None
+    client: httpx.Client | None = None
+    usage_callback: Callable[[dict], None] | None = None
 
-    close_client = client is None
-    http_client = client or httpx.Client(timeout=180)
-    try:
-        response = http_client.post(
-            API_URL,
-            headers={"Authorization": f"Bearer {resolved_api_key}"},
-            json={
-                "model": model,
-                "temperature": 0,
-                "messages": [
-                    {"role": "system", "content": _system_prompt(meeting_context)},
-                    {"role": "user", "content": transcript_markdown},
-                ],
-            },
+
+@dataclass(frozen=True)
+class AnalysisRequest:
+    transcript_markdown: str
+    meeting_context: str | None = None
+    options: OpenAIRequestOptions = field(default_factory=OpenAIRequestOptions)
+
+
+@dataclass(frozen=True)
+class TitleRequest:
+    transcript_markdown: str
+    analysis_markdown: str
+    meeting_context: str | None = None
+    options: OpenAIRequestOptions = field(default_factory=OpenAIRequestOptions)
+
+
+@dataclass(frozen=True)
+class ChatCompletionRequest:
+    system_prompt: str
+    user_prompt: str
+    options: OpenAIRequestOptions
+    timeout_seconds: int
+
+
+def analyze_meeting(request: AnalysisRequest) -> str:
+    return _post_chat_completion(
+        ChatCompletionRequest(
+            system_prompt=_system_prompt(request.meeting_context),
+            user_prompt=request.transcript_markdown,
+            options=request.options,
+            timeout_seconds=180,
         )
-        response.raise_for_status()
-        response_json = response.json()
-        if usage_callback is not None:
-            usage_callback(response_json)
+    )
+
+
+def suggest_meeting_title(request: TitleRequest) -> str:
+    content = _post_chat_completion(
+        ChatCompletionRequest(
+            system_prompt=_title_system_prompt(request.meeting_context),
+            user_prompt=(
+                f"Transcript:\n{request.transcript_markdown}\n\n"
+                f"Analysis:\n{request.analysis_markdown}"
+            ),
+            options=request.options,
+            timeout_seconds=60,
+        )
+    )
+    return _clean_title(content)
+
+
+def _post_chat_completion(request: ChatCompletionRequest) -> str:
+    resolved_api_key = _require_api_key(request.options)
+    close_client = request.options.client is None
+    http_client = request.options.client or httpx.Client(timeout=request.timeout_seconds)
+    try:
+        response_json = _send_chat_completion(http_client, resolved_api_key, request)
+        _record_usage(request.options, response_json)
         return _extract_content(response_json)
     except httpx.HTTPStatusError as exc:
         message = f"OpenAI HTTP {exc.response.status_code}: {exc.response.text}"
@@ -52,57 +86,43 @@ def analyze_meeting(
     except httpx.HTTPError as exc:
         raise OpenAIAnalysisError(f"OpenAI request failed: {exc}") from exc
     finally:
-        if close_client:
-            http_client.close()
+        _close_client(http_client, close_client)
 
 
-def suggest_meeting_title(
-    transcript_markdown: str,
-    analysis_markdown: str,
-    meeting_context: str | None = None,
-    model: str = DEFAULT_ANALYSIS_MODEL,
-    api_key: str | None = None,
-    client: httpx.Client | None = None,
-    usage_callback: Callable[[dict], None] | None = None,
-) -> str:
-    resolved_api_key = api_key or get_api_key("openai")
+def _require_api_key(options: OpenAIRequestOptions) -> str:
+    resolved_api_key = options.api_key or get_api_key("openai")
     if not resolved_api_key:
         raise OpenAIAnalysisError("Missing OPENAI_API_KEY.")
+    return resolved_api_key
 
-    close_client = client is None
-    http_client = client or httpx.Client(timeout=60)
-    try:
-        response = http_client.post(
-            API_URL,
-            headers={"Authorization": f"Bearer {resolved_api_key}"},
-            json={
-                "model": model,
-                "temperature": 0,
-                "messages": [
-                    {"role": "system", "content": _title_system_prompt(meeting_context)},
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Transcript:\n{transcript_markdown}\n\n"
-                            f"Analysis:\n{analysis_markdown}"
-                        ),
-                    },
-                ],
-            },
-        )
-        response.raise_for_status()
-        response_json = response.json()
-        if usage_callback is not None:
-            usage_callback(response_json)
-        return _clean_title(_extract_content(response_json))
-    except httpx.HTTPStatusError as exc:
-        message = f"OpenAI HTTP {exc.response.status_code}: {exc.response.text}"
-        raise OpenAIAnalysisError(message) from exc
-    except httpx.HTTPError as exc:
-        raise OpenAIAnalysisError(f"OpenAI request failed: {exc}") from exc
-    finally:
-        if close_client:
-            http_client.close()
+
+def _close_client(client: httpx.Client, close_client: bool) -> None:
+    if close_client:
+        client.close()
+
+
+def _send_chat_completion(
+    client: httpx.Client, api_key: str, request: ChatCompletionRequest
+) -> dict:
+    response = client.post(
+        API_URL,
+        headers={"Authorization": f"Bearer {api_key}"},
+        json={
+            "model": request.options.model,
+            "temperature": 0,
+            "messages": [
+                {"role": "system", "content": request.system_prompt},
+                {"role": "user", "content": request.user_prompt},
+            ],
+        },
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def _record_usage(options: OpenAIRequestOptions, response_json: dict) -> None:
+    if options.usage_callback is not None:
+        options.usage_callback(response_json)
 
 
 def fallback_analysis(error: str | None = None) -> str:

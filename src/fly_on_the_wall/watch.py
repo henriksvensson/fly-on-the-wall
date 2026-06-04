@@ -38,6 +38,34 @@ class WatchScanResult:
     failed: int
 
 
+@dataclass(frozen=True)
+class WatchFile:
+    folder_id: str
+    path: Path
+    size_bytes: int
+    mtime_ns: int
+    mtime: float
+
+
+@dataclass(frozen=True)
+class WatchFileResult:
+    processed: int = 0
+    ignored: int = 0
+    skipped: int = 0
+    failed: int = 0
+
+
+@dataclass(frozen=True)
+class WatchScanContext:
+    connection: Connection
+    config: AppConfig
+    storage: StoragePaths | None
+    process_fn: ProcessFn
+    stable_age_seconds: int
+    now: float
+    progress: ProgressFn | None
+
+
 def add_watch_folder(connection: Connection, path: Path, name: str | None = None) -> WatchFolder:
     resolved_path = _resolve_folder_path(path)
     folder_id = str(uuid4())
@@ -115,7 +143,9 @@ def scan_watch_folders(
     progress: ProgressFn | None = None,
 ) -> WatchScanResult:
     seen = processed = ignored = skipped = failed = 0
-    now = time.time()
+    context = WatchScanContext(
+        connection, config, storage, process_fn, stable_age_seconds, time.time(), progress
+    )
 
     for folder in list_watch_folders(connection):
         if not folder.enabled:
@@ -126,48 +156,11 @@ def scan_watch_folders(
 
         for audio_path in _audio_files(folder.path):
             seen += 1
-            stat = audio_path.stat()
-            was_seen_unchanged = _item_seen_unchanged(
-                connection, audio_path, stat.st_size, stat.st_mtime_ns
-            )
-            _upsert_seen_item(connection, folder.id, audio_path, stat.st_size, stat.st_mtime_ns)
-
-            if not was_seen_unchanged and now - stat.st_mtime < stable_age_seconds:
-                skipped += 1
-                _report(progress, f"Skipping recently modified file {audio_path}")
-                continue
-
-            if _item_final_for_current_file(connection, audio_path, stat.st_size, stat.st_mtime_ns):
-                skipped += 1
-                continue
-
-            _report(progress, f"Processing {audio_path}")
-            audio_hash = file_sha256(audio_path)
-            _mark_item_processing(
-                connection, audio_path, audio_hash, stat.st_size, stat.st_mtime_ns
-            )
-            try:
-                result = process_fn(
-                    connection,
-                    audio_path,
-                    None,
-                    config,
-                    storage=storage,
-                    progress=progress,
-                )
-            except RecordingIgnoredError as exc:
-                ignored += 1
-                _mark_item_ignored(connection, audio_path, exc.meeting.id, exc.quality.reason)
-                _report(progress, f"Ignored {audio_path}: {exc.quality.reason}")
-                continue
-            except Exception as exc:
-                failed += 1
-                _mark_item_failed(connection, audio_path, str(exc))
-                _report(progress, f"Failed {audio_path}: {exc}")
-                continue
-
-            processed += 1
-            _mark_item_done(connection, audio_path, result.meeting.id)
+            result = _scan_audio_file(context, _watch_file(folder.id, audio_path))
+            processed += result.processed
+            ignored += result.ignored
+            skipped += result.skipped
+            failed += result.failed
 
     return WatchScanResult(
         seen=seen, processed=processed, ignored=ignored, skipped=skipped, failed=failed
@@ -200,10 +193,58 @@ def _audio_files(folder: Path) -> Iterable[Path]:
         yield path
 
 
-def _upsert_seen_item(
-    connection: Connection, folder_id: str, path: Path, size_bytes: int, mtime_ns: int
-) -> None:
-    existing = _watch_item(connection, path)
+def _watch_file(folder_id: str, path: Path) -> WatchFile:
+    stat = path.stat()
+    return WatchFile(folder_id, path, stat.st_size, stat.st_mtime_ns, stat.st_mtime)
+
+
+def _scan_audio_file(
+    context: WatchScanContext,
+    item: WatchFile,
+) -> WatchFileResult:
+    was_seen_unchanged = _item_seen_unchanged(context.connection, item)
+    _upsert_seen_item(context.connection, item)
+
+    if not was_seen_unchanged and context.now - item.mtime < context.stable_age_seconds:
+        _report(context.progress, f"Skipping recently modified file {item.path}")
+        return WatchFileResult(skipped=1)
+
+    if _item_final_for_current_file(context.connection, item):
+        return WatchFileResult(skipped=1)
+
+    return _process_audio_file(context, item)
+
+
+def _process_audio_file(
+    context: WatchScanContext,
+    item: WatchFile,
+) -> WatchFileResult:
+    _report(context.progress, f"Processing {item.path}")
+    _mark_item_processing(context.connection, item, file_sha256(item.path))
+    try:
+        result = context.process_fn(
+            context.connection,
+            item.path,
+            None,
+            context.config,
+            storage=context.storage,
+            progress=context.progress,
+        )
+    except RecordingIgnoredError as exc:
+        _mark_item_ignored(context.connection, item.path, exc.meeting.id, exc.quality.reason)
+        _report(context.progress, f"Ignored {item.path}: {exc.quality.reason}")
+        return WatchFileResult(ignored=1)
+    except Exception as exc:
+        _mark_item_failed(context.connection, item.path, str(exc))
+        _report(context.progress, f"Failed {item.path}: {exc}")
+        return WatchFileResult(failed=1)
+
+    _mark_item_done(context.connection, item.path, result.meeting.id)
+    return WatchFileResult(processed=1)
+
+
+def _upsert_seen_item(connection: Connection, item: WatchFile) -> None:
+    existing = _watch_item(connection, item.path)
     with connection:
         if existing is None:
             connection.execute(
@@ -211,11 +252,11 @@ def _upsert_seen_item(
                 INSERT INTO watch_items(id, folder_id, path, size_bytes, mtime_ns, status)
                 VALUES (?, ?, ?, ?, ?, 'pending')
                 """,
-                (str(uuid4()), folder_id, str(path), size_bytes, mtime_ns),
+                (str(uuid4()), item.folder_id, str(item.path), item.size_bytes, item.mtime_ns),
             )
             return
 
-        if existing["size_bytes"] != size_bytes or existing["mtime_ns"] != mtime_ns:
+        if existing["size_bytes"] != item.size_bytes or existing["mtime_ns"] != item.mtime_ns:
             connection.execute(
                 """
                 UPDATE watch_items
@@ -224,7 +265,7 @@ def _upsert_seen_item(
                     updated_at = CURRENT_TIMESTAMP
                 WHERE path = ?
                 """,
-                (folder_id, size_bytes, mtime_ns, str(path)),
+                (item.folder_id, item.size_bytes, item.mtime_ns, str(item.path)),
             )
         else:
             connection.execute(
@@ -233,36 +274,30 @@ def _upsert_seen_item(
                 SET folder_id = ?, last_seen_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
                 WHERE path = ?
                 """,
-                (folder_id, str(path)),
+                (item.folder_id, str(item.path)),
             )
 
 
-def _item_final_for_current_file(
-    connection: Connection, path: Path, size_bytes: int, mtime_ns: int
-) -> bool:
-    item = _watch_item(connection, path)
+def _item_final_for_current_file(connection: Connection, file: WatchFile) -> bool:
+    item = _watch_item(connection, file.path)
     return bool(
         item is not None
         and item["status"] in {"done", "ignored"}
-        and item["size_bytes"] == size_bytes
-        and item["mtime_ns"] == mtime_ns
+        and item["size_bytes"] == file.size_bytes
+        and item["mtime_ns"] == file.mtime_ns
     )
 
 
-def _item_seen_unchanged(
-    connection: Connection, path: Path, size_bytes: int, mtime_ns: int
-) -> bool:
-    item = _watch_item(connection, path)
+def _item_seen_unchanged(connection: Connection, file: WatchFile) -> bool:
+    item = _watch_item(connection, file.path)
     return bool(
         item is not None
-        and item["size_bytes"] == size_bytes
-        and item["mtime_ns"] == mtime_ns
+        and item["size_bytes"] == file.size_bytes
+        and item["mtime_ns"] == file.mtime_ns
     )
 
 
-def _mark_item_processing(
-    connection: Connection, path: Path, file_hash: str, size_bytes: int, mtime_ns: int
-) -> None:
+def _mark_item_processing(connection: Connection, item: WatchFile, file_hash: str) -> None:
     with connection:
         connection.execute(
             """
@@ -271,7 +306,7 @@ def _mark_item_processing(
                 error_message = NULL, updated_at = CURRENT_TIMESTAMP
             WHERE path = ?
             """,
-            (file_hash, size_bytes, mtime_ns, str(path)),
+            (file_hash, item.size_bytes, item.mtime_ns, str(item.path)),
         )
 
 

@@ -1,26 +1,20 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
-from time import sleep
 from typing import Annotated
 
 import typer
-from prompt_toolkit.application import Application
-from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.layout import HSplit, Layout, Window
-from prompt_toolkit.layout.controls import FormattedTextControl
 from rich.console import Console
 from rich.table import Table
-from watchfiles import watch
 
 from fly_on_the_wall import __version__
-from fly_on_the_wall.audio import AudioError, start_audio_playback, stop_audio_playback
+from fly_on_the_wall.cli_costs import costs_app
+from fly_on_the_wall.cli_publish import publish_app
+from fly_on_the_wall.cli_speaker_review import speakers_review
+from fly_on_the_wall.cli_watch import watch_app
 from fly_on_the_wall.config import load_config
-from fly_on_the_wall.costs import cost_summary, meeting_cost_summary
 from fly_on_the_wall.db import database
 from fly_on_the_wall.doctor import has_failures, run_checks
-from fly_on_the_wall.embeddings import EmbeddingBackend, PyannoteEmbeddingBackend
 from fly_on_the_wall.meetings import (
     delete_meeting,
     get_meeting,
@@ -29,7 +23,6 @@ from fly_on_the_wall.meetings import (
     rename_meeting,
 )
 from fly_on_the_wall.people import (
-    Person,
     create_person,
     get_person,
     get_user_person,
@@ -42,14 +35,6 @@ from fly_on_the_wall.people_embeddings import (
     people_embedding_status,
 )
 from fly_on_the_wall.processing import process_audio, refresh_meeting
-from fly_on_the_wall.publishing import (
-    add_publish_target,
-    list_publish_targets,
-    publish_all_meetings,
-    publish_meeting,
-    remove_publish_target,
-    set_publish_target_enabled,
-)
 from fly_on_the_wall.reanalysis import (
     list_stale_meetings,
     list_stale_stages,
@@ -65,25 +50,12 @@ from fly_on_the_wall.secrets import (
     remove_api_key,
     set_api_key,
 )
-from fly_on_the_wall.speaker_identity import (
-    create_voice_identity_from_speaker,
-    prepare_speaker_review_clip,
-)
 from fly_on_the_wall.speakers import (
     assign_speaker_to_person,
     list_unknown_speakers,
     mark_speaker_ignored,
-    speaker_examples,
 )
 from fly_on_the_wall.voice_samples import list_voice_samples
-from fly_on_the_wall.watch import (
-    DEFAULT_STABLE_AGE_SECONDS,
-    add_watch_folder,
-    list_watch_folders,
-    remove_watch_folder,
-    scan_watch_folders,
-    set_watch_folder_enabled,
-)
 
 app = typer.Typer(
     name="fot",
@@ -101,13 +73,6 @@ meeting_speakers_app = typer.Typer(
 )
 refresh_app = typer.Typer(help="Refresh derived meeting outputs.", no_args_is_help=True)
 secrets_app = typer.Typer(help="Manage API keys in the OS keyring.", no_args_is_help=True)
-watch_app = typer.Typer(help="Process audio from watched folders.", no_args_is_help=True)
-watch_folders_app = typer.Typer(help="Manage watched folders.", no_args_is_help=True)
-publish_app = typer.Typer(help="Publish meetings to external targets.", no_args_is_help=True)
-publish_targets_app = typer.Typer(help="Manage publish targets.", no_args_is_help=True)
-costs_app = typer.Typer(
-    help="Inspect external service usage and estimated costs.", no_args_is_help=True
-)
 app.add_typer(people_app, name="people")
 people_app.add_typer(people_embeddings_app, name="embeddings")
 app.add_typer(meetings_app, name="meetings")
@@ -115,19 +80,10 @@ meetings_app.add_typer(meeting_speakers_app, name="speakers")
 app.add_typer(refresh_app, name="refresh")
 app.add_typer(secrets_app, name="secrets")
 app.add_typer(watch_app, name="watch")
-watch_app.add_typer(watch_folders_app, name="folders")
 app.add_typer(publish_app, name="publish")
-publish_app.add_typer(publish_targets_app, name="targets")
 app.add_typer(costs_app, name="costs")
 console = Console()
-
-
-@dataclass(frozen=True)
-class MenuChoice:
-    shortcut: str | None
-    label: str
-    value: str | None
-    playback_path: Path | None = None
+meeting_speakers_app.command("review")(speakers_review)
 
 
 def _version_callback(show_version: bool) -> None:
@@ -198,311 +154,6 @@ def process(
     console.print(
         f"Review unknown speakers: fot meetings speakers unknown --meeting {result.meeting.slug}"
     )
-
-
-@watch_app.command("scan")
-def watch_scan(
-    stable_age_seconds: Annotated[
-        int,
-        typer.Option(
-            "--stable-age-seconds",
-            min=0,
-            help="Only process files unchanged for at least this many seconds.",
-        ),
-    ] = DEFAULT_STABLE_AGE_SECONDS,
-) -> None:
-    """Scan enabled watched folders once and process new audio files."""
-    config = load_config()
-    _scan_watch_once(config, stable_age_seconds)
-
-
-@watch_app.command("run")
-def watch_run(
-    interval_seconds: Annotated[
-        int,
-        typer.Option("--interval-seconds", min=1, help="Seconds between safety scans."),
-    ] = 60,
-    stable_age_seconds: Annotated[
-        int,
-        typer.Option(
-            "--stable-age-seconds",
-            min=0,
-            help="Only process files unchanged for at least this many seconds.",
-        ),
-    ] = DEFAULT_STABLE_AGE_SECONDS,
-) -> None:
-    """Watch enabled folders and process new audio files as they appear."""
-    config = load_config()
-    with database() as connection:
-        folders = [folder for folder in list_watch_folders(connection) if folder.enabled]
-
-    if not folders:
-        console.print("No enabled watch folders configured.")
-        console.print("Add one with: fot watch folders add <path>")
-        raise typer.Exit(code=1)
-
-    console.print("Watching folders for audio changes. Press Ctrl+C to stop.")
-    for path in [folder.path for folder in folders]:
-        console.print(f"- {path}")
-
-    _scan_watch_once(config, stable_age_seconds)
-    while True:
-        with database() as connection:
-            folders = [folder for folder in list_watch_folders(connection) if folder.enabled]
-
-        existing_paths = [folder.path for folder in folders if folder.path.is_dir()]
-        if not existing_paths:
-            console.print("No watched folders are currently mounted. Running safety scan.")
-            _scan_watch_once(config, stable_age_seconds)
-            sleep(interval_seconds)
-            continue
-
-        try:
-            changes = next(
-                watch(
-                    *existing_paths,
-                    recursive=True,
-                    yield_on_timeout=True,
-                    rust_timeout=interval_seconds * 1000,
-                )
-            )
-        except (OSError, RuntimeError) as exc:
-            console.print(f"Watch backend restarted after folder change: {exc}")
-            _scan_watch_once(config, stable_age_seconds)
-            continue
-
-        if changes:
-            console.print(f"Detected {len(changes)} file change(s).")
-        else:
-            console.print("Running periodic safety scan.")
-        _scan_watch_once(config, stable_age_seconds)
-
-
-@watch_folders_app.command("add")
-def watch_folders_add(
-    path: Annotated[Path, typer.Argument(file_okay=False, dir_okay=True)],
-    name: Annotated[str | None, typer.Option("--name", "-n", help="Optional folder name.")] = None,
-) -> None:
-    """Add a folder to scan for audio files."""
-    with database() as connection:
-        try:
-            folder = add_watch_folder(connection, path, name)
-        except Exception as exc:
-            console.print(str(exc))
-            raise typer.Exit(code=1) from exc
-    console.print(f"Added watch folder {folder.path}")
-    if folder.name:
-        console.print(f"Name: {folder.name}")
-
-
-@watch_folders_app.command("list")
-def watch_folders_list() -> None:
-    """List watched folders."""
-    with database() as connection:
-        folders = list_watch_folders(connection)
-    if not folders:
-        console.print("No watch folders configured.")
-        return
-    table = Table(title="Watch Folders")
-    table.add_column("ID")
-    table.add_column("Name")
-    table.add_column("Enabled")
-    table.add_column("Path")
-    for folder in folders:
-        table.add_row(
-            folder.id,
-            folder.name or "",
-            "yes" if folder.enabled else "no",
-            str(folder.path),
-        )
-    console.print(table)
-
-
-@watch_folders_app.command("remove")
-def watch_folders_remove(identifier: str) -> None:
-    """Remove a watched folder by id, name, or path."""
-    with database() as connection:
-        folder = remove_watch_folder(connection, identifier)
-    if folder is None:
-        console.print(f"Watch folder not found: {identifier}")
-        raise typer.Exit(code=1)
-    console.print(f"Removed watch folder {folder.path}")
-
-
-@watch_folders_app.command("enable")
-def watch_folders_enable(identifier: str) -> None:
-    """Enable a watched folder by id, name, or path."""
-    _set_watch_folder_enabled_command(identifier, True)
-
-
-@watch_folders_app.command("disable")
-def watch_folders_disable(identifier: str) -> None:
-    """Disable a watched folder by id, name, or path."""
-    _set_watch_folder_enabled_command(identifier, False)
-
-
-@publish_app.command("meeting")
-def publish_meeting_command(
-    meeting: str,
-    target: Annotated[str, typer.Option("--target", "-t", help="Publish target name or id.")],
-) -> None:
-    """Publish one meeting to a configured target."""
-    with database() as connection:
-        try:
-            result = publish_meeting(connection, meeting, target)
-        except ValueError as exc:
-            console.print(str(exc))
-            raise typer.Exit(code=1) from exc
-    console.print(f"Published {meeting} to {result.target.name}")
-    console.print(f"Output: {result.output_path}")
-
-
-@publish_app.command("all")
-def publish_all_command(
-    target: Annotated[str, typer.Option("--target", "-t", help="Publish target name or id.")],
-    only_unpublished: Annotated[
-        bool,
-        typer.Option("--only-unpublished", help="Skip meetings already published to this target."),
-    ] = False,
-) -> None:
-    """Publish all exported meetings to a configured target."""
-    with database() as connection:
-        try:
-            results = publish_all_meetings(connection, target, only_unpublished)
-        except ValueError as exc:
-            console.print(str(exc))
-            raise typer.Exit(code=1) from exc
-
-    if not results:
-        console.print("No meetings to publish.")
-        return
-    for result in results:
-        console.print(f"Published to {result.target.name}: {result.output_path}")
-    console.print(f"Published {len(results)} meeting(s).")
-
-
-@publish_targets_app.command("add")
-def publish_targets_add(
-    target_type: str,
-    path: Annotated[Path, typer.Argument(file_okay=False, dir_okay=True)],
-    name: Annotated[str, typer.Option("--name", "-n", help="Target name.")],
-    auto_publish: Annotated[
-        bool, typer.Option("--auto-publish", help="Publish processed meetings automatically.")
-    ] = False,
-) -> None:
-    """Add an external publish target."""
-    with database() as connection:
-        try:
-            target = add_publish_target(connection, target_type, path, name, auto_publish)
-        except Exception as exc:
-            console.print(str(exc))
-            raise typer.Exit(code=1) from exc
-    console.print(f"Added {target.target_type} publish target {target.name}")
-    console.print(f"Path: {target.path}")
-
-
-@publish_targets_app.command("list")
-def publish_targets_list() -> None:
-    """List publish targets."""
-    with database() as connection:
-        targets = list_publish_targets(connection)
-    if not targets:
-        console.print("No publish targets configured.")
-        return
-    table = Table(title="Publish Targets")
-    table.add_column("Name")
-    table.add_column("Type")
-    table.add_column("Auto")
-    table.add_column("Enabled")
-    table.add_column("Path")
-    for target in targets:
-        table.add_row(
-            target.name,
-            target.target_type,
-            "yes" if target.auto_publish else "no",
-            "yes" if target.enabled else "no",
-            str(target.path),
-        )
-    console.print(table)
-
-
-@publish_targets_app.command("remove")
-def publish_targets_remove(identifier: str) -> None:
-    """Remove a publish target by id or name."""
-    with database() as connection:
-        target = remove_publish_target(connection, identifier)
-    if target is None:
-        console.print(f"Publish target not found: {identifier}")
-        raise typer.Exit(code=1)
-    console.print(f"Removed publish target {target.name}")
-
-
-@publish_targets_app.command("enable")
-def publish_targets_enable(identifier: str) -> None:
-    """Enable a publish target by id or name."""
-    _set_publish_target_enabled_command(identifier, True)
-
-
-@publish_targets_app.command("disable")
-def publish_targets_disable(identifier: str) -> None:
-    """Disable a publish target by id or name."""
-    _set_publish_target_enabled_command(identifier, False)
-
-
-@costs_app.command("summary")
-def costs_summary() -> None:
-    """Show estimated external service costs by provider and service."""
-    with database() as connection:
-        rows = cost_summary(connection)
-    if not rows:
-        console.print("No service usage recorded yet.")
-        return
-    table = Table(title="Estimated Service Costs")
-    table.add_column("Provider")
-    table.add_column("Service")
-    table.add_column("Calls", justify="right")
-    table.add_column("Input", justify="right")
-    table.add_column("Output", justify="right")
-    table.add_column("Estimated Cost", justify="right")
-    for row in rows:
-        table.add_row(
-            row["provider"],
-            row["service"],
-            str(row["calls"]),
-            _format_quantity(row["input_quantity"]),
-            _format_quantity(row["output_quantity"]),
-            _format_usd(row["estimated_cost_usd"]),
-        )
-    console.print(table)
-
-
-@costs_app.command("meeting")
-def costs_meeting(meeting: str) -> None:
-    """Show estimated external service costs for one meeting."""
-    with database() as connection:
-        rows = meeting_cost_summary(connection, meeting)
-    if not rows:
-        console.print(f"No service usage recorded for meeting: {meeting}")
-        return
-    table = Table(title=f"Estimated Service Costs: {meeting}")
-    table.add_column("Provider")
-    table.add_column("Service")
-    table.add_column("Model")
-    table.add_column("Calls", justify="right")
-    table.add_column("Input", justify="right")
-    table.add_column("Output", justify="right")
-    table.add_column("Estimated Cost", justify="right")
-    for row in rows:
-        table.add_row(
-            row["provider"],
-            row["service"],
-            row["model"],
-            str(row["calls"]),
-            _format_quantity(row["input_quantity"]),
-            _format_quantity(row["output_quantity"]),
-            _format_usd(row["estimated_cost_usd"]),
-        )
-    console.print(table)
 
 
 @meetings_app.command("list")
@@ -630,131 +281,6 @@ def speakers_unknown(
     console.print(table)
 
 
-@meeting_speakers_app.command("review")
-def speakers_review(
-    meeting: Annotated[
-        str | None, typer.Option("--meeting", "-m", help="Meeting ID or slug.")
-    ] = None,
-) -> None:
-    """Interactively review and assign unknown meeting speakers."""
-    backend: EmbeddingBackend | None = None
-    changed_meetings: set[str] = set()
-    quit_review = False
-    with database() as connection:
-        speakers = list_unknown_speakers(connection, meeting)
-
-        if not speakers:
-            console.print("No unknown speakers found.")
-            return
-
-        for speaker in speakers:
-            if quit_review:
-                break
-            console.print(f"Meeting speaker: {speaker['id']}")
-            console.print(f"Meeting: {speaker['meeting_slug']}")
-            console.print(f"Provider label: {speaker['label']}")
-            examples = speaker_examples(connection, speaker["id"], limit=1)
-            if examples:
-                console.print(f"Example: {examples[0]['text']}")
-
-            try:
-                clip_path = prepare_speaker_review_clip(connection, speaker["id"])
-            except AudioError as exc:
-                clip_path = None
-                console.print(f"Could not extract review clip: {exc}")
-
-            if clip_path is not None:
-                console.print(f"Clip: {clip_path}")
-
-            while True:
-                action = _select_speaker_review_action(clip_path)
-                if action == "a":
-                    person = _select_person(connection)
-                    if person is None:
-                        console.print("Assignment cancelled.")
-                        continue
-                    backend = backend or _try_embedding_backend()
-                    try:
-                        result = create_voice_identity_from_speaker(
-                            connection, speaker["id"], person.id, storage=None, backend=backend
-                        )
-                    except ValueError as exc:
-                        console.print(str(exc))
-                        continue
-                    console.print(f"Assigned meeting speaker to {result.person_name}")
-                    console.print(f"Voice sample: {result.voice_sample.audio_path}")
-                    changed_meetings.add(speaker["meeting_slug"])
-                    break
-                if action == "n":
-                    person = _select_person(connection)
-                    if person is None:
-                        console.print("Assignment cancelled.")
-                        continue
-                    assignment = assign_speaker_to_person(connection, speaker["id"], person.id)
-                    console.print(
-                        f"Assigned meeting speaker to {assignment['name']} without voice sample."
-                    )
-                    changed_meetings.add(speaker["meeting_slug"])
-                    break
-                if action == "c":
-                    name = typer.prompt("New known person name")
-                    backend = backend or _try_embedding_backend()
-                    try:
-                        result = create_voice_identity_from_speaker(
-                            connection,
-                            speaker["id"],
-                            name,
-                            create_missing_person=True,
-                            storage=None,
-                            backend=backend,
-                        )
-                    except ValueError as exc:
-                        console.print(str(exc))
-                        continue
-                    console.print(f"Created known person {result.person_name}")
-                    console.print(f"Voice sample: {result.voice_sample.audio_path}")
-                    changed_meetings.add(speaker["meeting_slug"])
-                    break
-                if action == "o":
-                    name = typer.prompt("New known person name")
-                    assignment = assign_speaker_to_person(connection, speaker["id"], name)
-                    console.print(f"Created known person {assignment['name']}")
-                    console.print(
-                        f"Assigned meeting speaker to {assignment['name']} without voice sample."
-                    )
-                    changed_meetings.add(speaker["meeting_slug"])
-                    break
-                if action == "i":
-                    mark_speaker_ignored(connection, speaker["id"])
-                    console.print("Ignored meeting speaker; it will not appear in future reviews.")
-                    changed_meetings.add(speaker["meeting_slug"])
-                    break
-                if action == "s":
-                    console.print("Skipped.")
-                    break
-                if action == "q":
-                    console.print("Review cancelled.")
-                    quit_review = True
-                    break
-                console.print("Choose an available action.")
-
-        if changed_meetings:
-            refresh_meetings = _speaker_review_follow_up(connection, changed_meetings)
-            if refresh_meetings:
-                config = load_config()
-                for meeting_slug in sorted(refresh_meetings):
-                    result = refresh_meeting(
-                        connection,
-                        meeting_slug,
-                        config,
-                        embedding_backend=backend,
-                        progress=lambda message: console.print(f"-> {message}"),
-                    )
-                    console.print(f"Refreshed {result.meeting.slug}")
-                    console.print(f"Transcript: {result.export.transcript_path}")
-                    console.print(f"Analysis: {result.export.analysis_path}")
-
-
 @meeting_speakers_app.command("assign")
 def speakers_assign(local_speaker_id: str, person: str) -> None:
     """Assign a meeting-local speaker to a person, creating that person if needed."""
@@ -792,43 +318,58 @@ def refresh_speakers(
     """Refresh speaker matching and mark downstream outputs stale."""
     with database() as connection:
         if meeting is None:
-            results = rerun_speaker_matching_for_meetings(
-                connection,
-                include_known_speakers,
-                progress=lambda message: console.print(f"-> {message}"),
-            )
-            if not results:
-                console.print("No meetings found for speaker refresh.")
-                return
-            table = Table(title="Speaker Refresh")
-            table.add_column("Meeting")
-            table.add_column("New Speaker Matches")
-            for result in results:
-                table.add_row(result["meeting_slug"], str(result["match_count"]))
-            console.print(table)
-            console.print(f"Speaker matching refreshed for meetings: {len(results)}")
-            changed = sum(1 for result in results if result["match_count"])
-            if changed:
-                console.print("Next: fot refresh stale-meetings")
-            else:
-                console.print("No speaker assignment changes; downstream stages left untouched.")
+            _refresh_speakers_for_all_meetings(connection, include_known_speakers)
             return
 
-        try:
-            match_count = rerun_speaker_matching(
-                connection,
-                meeting,
-                progress=lambda message: console.print(f"-> {message}"),
-            )
-        except RuntimeError as exc:
-            console.print(f"Speaker matching skipped: {exc}")
-            match_count = 0
+        match_count = _refresh_speakers_for_one_meeting(connection, meeting)
         stages = mark_speaker_reanalysis_stale(connection, meeting) if match_count else []
     console.print(f"New speaker matches: {match_count}")
     if stages:
         console.print(f"Marked stale: {', '.join(stages)}")
     else:
         console.print("No speaker assignment changes; downstream stages left untouched.")
+
+
+def _refresh_speakers_for_all_meetings(connection, include_known_speakers: bool) -> None:
+    results = rerun_speaker_matching_for_meetings(
+        connection,
+        include_known_speakers,
+        progress=lambda message: console.print(f"-> {message}"),
+    )
+    if not results:
+        console.print("No meetings found for speaker refresh.")
+        return
+    _print_speaker_refresh_results(results)
+
+
+def _print_speaker_refresh_results(results) -> None:
+    table = Table(title="Speaker Refresh")
+    table.add_column("Meeting")
+    table.add_column("New Speaker Matches")
+    for result in results:
+        table.add_row(result["meeting_slug"], str(result["match_count"]))
+    console.print(table)
+    console.print(f"Speaker matching refreshed for meetings: {len(results)}")
+    _print_speaker_refresh_next_step(results)
+
+
+def _print_speaker_refresh_next_step(results) -> None:
+    if any(result["match_count"] for result in results):
+        console.print("Next: fot refresh stale-meetings")
+        return
+    console.print("No speaker assignment changes; downstream stages left untouched.")
+
+
+def _refresh_speakers_for_one_meeting(connection, meeting: str) -> int:
+    try:
+        return rerun_speaker_matching(
+            connection,
+            meeting,
+            progress=lambda message: console.print(f"-> {message}"),
+        )
+    except RuntimeError as exc:
+        console.print(f"Speaker matching skipped: {exc}")
+        return 0
 
 
 @refresh_app.command("stale-meetings")
@@ -1046,231 +587,6 @@ def people_embeddings_backfill() -> None:
     )
     if result.embedded:
         console.print("Next: fot refresh speakers")
-
-
-def _try_embedding_backend() -> EmbeddingBackend | None:
-    try:
-        return PyannoteEmbeddingBackend()
-    except RuntimeError as exc:
-        console.print(f"Voice sample saved without embedding ({exc})")
-        return None
-
-
-def _format_usd(value: float | None) -> str:
-    if value is None:
-        return "unknown"
-    return f"${value:.4f}"
-
-
-def _format_quantity(value: float | None) -> str:
-    if value is None:
-        return "0"
-    if float(value).is_integer():
-        return str(int(value))
-    return f"{value:.2f}"
-
-
-def _scan_watch_once(config, stable_age_seconds: int) -> None:
-    with database() as connection:
-        result = scan_watch_folders(
-            connection,
-            config,
-            stable_age_seconds=stable_age_seconds,
-            progress=lambda message: console.print(f"-> {message}"),
-        )
-    console.print(
-        f"Watch scan complete: {result.processed} processed, "
-        f"{result.ignored} ignored, {result.skipped} skipped, "
-        f"{result.failed} failed, {result.seen} seen."
-    )
-
-
-def _set_watch_folder_enabled_command(identifier: str, enabled: bool) -> None:
-    with database() as connection:
-        folder = set_watch_folder_enabled(connection, identifier, enabled)
-    if folder is None:
-        console.print(f"Watch folder not found: {identifier}")
-        raise typer.Exit(code=1)
-    state = "Enabled" if enabled else "Disabled"
-    console.print(f"{state} watch folder {folder.path}")
-
-
-def _set_publish_target_enabled_command(identifier: str, enabled: bool) -> None:
-    with database() as connection:
-        target = set_publish_target_enabled(connection, identifier, enabled)
-    if target is None:
-        console.print(f"Publish target not found: {identifier}")
-        raise typer.Exit(code=1)
-    state = "Enabled" if enabled else "Disabled"
-    console.print(f"{state} publish target {target.name}")
-
-
-def _speaker_review_follow_up(connection, changed_meetings: set[str]) -> set[str]:
-    console.print(f"Speaker review changed {len(changed_meetings)} meeting(s).")
-    while True:
-        action = _select_speaker_review_follow_up_action()
-        if action == "a":
-            return set(changed_meetings)
-        if action == "g":
-            results = rerun_speaker_matching_for_meetings(connection)
-            changed_results = [result for result in results if result["match_count"]]
-            if not changed_results:
-                console.print("No new speaker matches found in other meetings.")
-                return set(changed_meetings)
-            refreshed = {result["meeting_slug"] for result in changed_results}
-            console.print(f"Refreshed speaker matching with new matches: {len(refreshed)}")
-            return set(changed_meetings) | refreshed
-        if action == "n":
-            console.print("Refresh skipped. You can run refresh later.")
-            return set()
-        console.print("Choose an available follow-up action.")
-
-
-def _select_person(connection) -> Person | None:
-    people = list_people(connection)
-    if not people:
-        console.print("No known people found. Create a known person instead.")
-        return None
-
-    choices = [
-        MenuChoice(str(index) if index <= 9 else None, person.display_name, person.id)
-        for index, person in enumerate(people, start=1)
-    ]
-    choices.append(MenuChoice("c", "Cancel", None))
-    selected_person_id = _select_menu("Known person", choices)
-    if selected_person_id is None:
-        return None
-    return next(person for person in people if person.id == selected_person_id)
-
-
-def _select_speaker_review_action(clip_path: Path | None) -> str:
-    choices = []
-    if clip_path is not None:
-        choices.append(MenuChoice("p", "Play clip", None, playback_path=clip_path))
-    choices.extend(
-        [
-            MenuChoice("a", "Assign with voice sample", "a"),
-            MenuChoice("n", "Assign only", "n"),
-            MenuChoice("c", "New known person with voice sample", "c"),
-            MenuChoice("o", "New known person only", "o"),
-            MenuChoice("i", "Ignore speaker forever", "i"),
-            MenuChoice("s", "Skip this time", "s"),
-            MenuChoice("q", "Quit review", "q"),
-        ]
-    )
-    return _select_menu("Action", choices) or "q"
-
-
-def _select_speaker_review_follow_up_action() -> str:
-    choices = [
-        MenuChoice("a", "Refresh affected meetings", "a"),
-        MenuChoice("g", "Refresh speaker matching globally", "g"),
-        MenuChoice("n", "Do nothing", "n"),
-    ]
-    return _select_menu("Next", choices) or "n"
-
-
-def _select_menu(title: str, choices: list[MenuChoice]) -> str | None:
-    selected_index = 0
-    selected_value: str | None = None
-    status_message = ""
-    playback_process = None
-    key_bindings = KeyBindings()
-
-    def finish(choice: MenuChoice) -> None:
-        nonlocal selected_value
-        if choice.playback_path is not None:
-            toggle_playback(choice.playback_path)
-            return
-        stop_playback()
-        selected_value = choice.value
-        application.exit()
-
-    def toggle_playback(audio_path: Path) -> None:
-        nonlocal playback_process, status_message
-        if playback_process is not None and playback_process.poll() is None:
-            stop_playback()
-            return
-        try:
-            playback_process = start_audio_playback(audio_path)
-        except AudioError as exc:
-            status_message = f"Could not play clip: {exc}"
-            application.invalidate()
-            return
-        status_message = "Playing. Press Enter to stop."
-        application.invalidate()
-
-    def stop_playback() -> None:
-        nonlocal playback_process, status_message
-        if playback_process is not None:
-            stop_audio_playback(playback_process)
-            playback_process = None
-        status_message = ""
-        application.invalidate()
-
-    def move(offset: int) -> None:
-        nonlocal selected_index
-        selected_index = (selected_index + offset) % len(choices)
-        application.invalidate()
-
-    @key_bindings.add("up")
-    def _up(_event) -> None:
-        move(-1)
-
-    @key_bindings.add("down")
-    def _down(_event) -> None:
-        move(1)
-
-    @key_bindings.add("enter")
-    def _enter(_event) -> None:
-        if playback_process is not None and playback_process.poll() is None:
-            stop_playback()
-            return
-        finish(choices[selected_index])
-
-    @key_bindings.add("escape")
-    @key_bindings.add("c-c")
-    def _cancel(_event) -> None:
-        nonlocal selected_value
-        stop_playback()
-        selected_value = None
-        application.exit()
-
-    bound_shortcuts: set[str] = set()
-    for choice in choices:
-        if choice.shortcut is None or choice.shortcut in bound_shortcuts:
-            continue
-        bound_shortcuts.add(choice.shortcut)
-        key_bindings.add(choice.shortcut)(lambda _event, selected=choice: finish(selected))
-
-    def render_menu():
-        nonlocal playback_process, status_message
-        if playback_process is not None and playback_process.poll() is not None:
-            playback_process = None
-            status_message = ""
-        lines = [("class:title", f"{title}\n")]
-        for index, choice in enumerate(choices):
-            prefix = "›" if index == selected_index else " "
-            style = "class:selected" if index == selected_index else ""
-            shortcut = f"[{choice.shortcut}] " if choice.shortcut is not None else ""
-            lines.append((style, f"{prefix} {shortcut}{choice.label}\n"))
-        if status_message:
-            lines.append(("class:status", f"\n{status_message}\n"))
-        lines.append(("class:help", "\nUse arrows, Enter, shortcut key, or Esc to cancel."))
-        return lines
-
-    control = FormattedTextControl(render_menu, focusable=True)
-    application = Application(
-        layout=Layout(HSplit([Window(content=control, always_hide_cursor=True)])),
-        key_bindings=key_bindings,
-        full_screen=False,
-        style=None,
-    )
-    try:
-        application.run()
-    except (KeyboardInterrupt, EOFError):
-        return None
-    return selected_value
 
 
 @secrets_app.command("status")

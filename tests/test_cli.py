@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from typer.testing import CliRunner
 
 import fly_on_the_wall.cli as cli
+import fly_on_the_wall.cli_speaker_review as cli_speaker_review
 from fly_on_the_wall.cli import app
 
 runner = CliRunner()
@@ -152,13 +153,21 @@ def test_speakers_review_quit_still_prompts_for_refresh(monkeypatch) -> None:
     ]
     actions = iter(["i", "q"])
 
-    monkeypatch.setattr(cli, "database", fake_database)
-    monkeypatch.setattr(cli, "list_unknown_speakers", lambda connection, meeting=None: speakers)
-    monkeypatch.setattr(cli, "speaker_examples", lambda connection, speaker_id, limit=1: [])
-    monkeypatch.setattr(cli, "prepare_speaker_review_clip", lambda connection, speaker_id: None)
-    monkeypatch.setattr(cli, "mark_speaker_ignored", lambda connection, speaker_id: None)
-    monkeypatch.setattr(cli, "_select_speaker_review_action", lambda clip_available: next(actions))
-    monkeypatch.setattr(cli, "_select_speaker_review_follow_up_action", lambda: "n")
+    monkeypatch.setattr(cli_speaker_review, "database", fake_database)
+    monkeypatch.setattr(
+        cli_speaker_review, "list_unknown_speakers", lambda connection, meeting=None: speakers
+    )
+    monkeypatch.setattr(
+        cli_speaker_review, "speaker_examples", lambda connection, speaker_id, limit=1: []
+    )
+    monkeypatch.setattr(
+        cli_speaker_review, "prepare_speaker_review_clip", lambda connection, speaker_id: None
+    )
+    monkeypatch.setattr(cli_speaker_review, "mark_speaker_ignored", lambda connection, speaker_id: None)
+    monkeypatch.setattr(
+        cli_speaker_review, "_select_speaker_review_action", lambda clip_available: next(actions)
+    )
+    monkeypatch.setattr(cli_speaker_review, "_select_speaker_review_follow_up_action", lambda: "n")
 
     result = runner.invoke(app, ["meetings", "speakers", "review"])
 
@@ -175,18 +184,26 @@ def test_speakers_review_can_create_new_person_without_voice_sample(monkeypatch)
 
     speakers = [{"id": "speaker-1", "meeting_slug": "intro", "label": "speaker_0"}]
 
-    monkeypatch.setattr(cli, "database", fake_database)
-    monkeypatch.setattr(cli, "list_unknown_speakers", lambda connection, meeting=None: speakers)
-    monkeypatch.setattr(cli, "speaker_examples", lambda connection, speaker_id, limit=1: [])
-    monkeypatch.setattr(cli, "prepare_speaker_review_clip", lambda connection, speaker_id: None)
-    monkeypatch.setattr(cli, "_select_speaker_review_action", lambda clip_path: "o")
-    monkeypatch.setattr(cli.typer, "prompt", lambda *args, **kwargs: "Person B")
+    monkeypatch.setattr(cli_speaker_review, "database", fake_database)
     monkeypatch.setattr(
-        cli,
+        cli_speaker_review, "list_unknown_speakers", lambda connection, meeting=None: speakers
+    )
+    monkeypatch.setattr(
+        cli_speaker_review, "speaker_examples", lambda connection, speaker_id, limit=1: []
+    )
+    monkeypatch.setattr(
+        cli_speaker_review, "prepare_speaker_review_clip", lambda connection, speaker_id: None
+    )
+    monkeypatch.setattr(cli_speaker_review, "_select_speaker_review_action", lambda clip_path: "o")
+    monkeypatch.setattr(cli_speaker_review.typer, "prompt", lambda *args, **kwargs: "Person B")
+    monkeypatch.setattr(
+        cli_speaker_review,
         "assign_speaker_to_person",
         lambda connection, speaker_id, person: {"name": person},
     )
-    monkeypatch.setattr(cli, "_speaker_review_follow_up", lambda connection, changed: set())
+    monkeypatch.setattr(
+        cli_speaker_review, "_speaker_review_follow_up", lambda connection, changed: set()
+    )
 
     result = runner.invoke(app, ["meetings", "speakers", "review"])
 
@@ -196,14 +213,14 @@ def test_speakers_review_can_create_new_person_without_voice_sample(monkeypatch)
 
 
 def test_speaker_review_follow_up_can_reanalyze_unknown_speakers(monkeypatch) -> None:
-    monkeypatch.setattr(cli, "_select_speaker_review_follow_up_action", lambda: "g")
+    monkeypatch.setattr(cli_speaker_review, "_select_speaker_review_follow_up_action", lambda: "g")
     monkeypatch.setattr(
-        cli,
+        cli_speaker_review,
         "rerun_speaker_matching_for_meetings",
         lambda connection: [{"meeting_slug": "other", "match_count": 1}],
     )
 
-    refresh_meetings = cli._speaker_review_follow_up(object(), {"intro"})
+    refresh_meetings = cli_speaker_review._speaker_review_follow_up(object(), {"intro"})
 
     assert refresh_meetings == {"intro", "other"}
 
