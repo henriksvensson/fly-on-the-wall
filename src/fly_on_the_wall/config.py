@@ -11,23 +11,12 @@ APP_DIR_NAME = "fly-on-the-wall"
 CONFIG_FILE_NAME = "config.yaml"
 GLOSSARY_FILE_NAME = "glossary.yaml"
 
-ProviderName = Literal[
-    "elevenlabs",
-    "speechmatics",
-    "openai",
-    "deepgram",
-    "gladia",
-    "soniox",
-]
+ProviderName = Literal["elevenlabs", "openai"]
 CleanupMode = Literal["off", "deterministic", "light"]
 
 API_KEY_ENV_VARS: dict[str, str] = {
     "elevenlabs": "ELEVENLABS_API_KEY",
-    "speechmatics": "SPEECHMATICS_API_KEY",
     "openai": "OPENAI_API_KEY",
-    "deepgram": "DEEPGRAM_API_KEY",
-    "gladia": "GLADIA_API_KEY",
-    "soniox": "SONIOX_API_KEY",
 }
 
 

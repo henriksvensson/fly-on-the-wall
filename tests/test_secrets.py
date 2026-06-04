@@ -73,4 +73,4 @@ def test_remove_api_key_deletes_from_keyring(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_known_providers_includes_core_providers() -> None:
-    assert {"elevenlabs", "openai"} <= set(known_providers())
+    assert known_providers() == ["elevenlabs", "openai"]

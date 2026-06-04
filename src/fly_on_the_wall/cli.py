@@ -600,8 +600,15 @@ def secrets_set(provider: str) -> None:
         set_api_key(provider, value)
     except SecretError as exc:
         console.print(str(exc))
+        _print_secret_env_fallback(provider)
         raise typer.Exit(code=1) from exc
     console.print(f"Stored {provider.lower()} API key in OS keyring.")
+
+
+def _print_secret_env_fallback(provider: str) -> None:
+    status = get_api_key_status(provider)
+    if status.env_var:
+        console.print(f"Alternative: set {status.env_var} in your shell environment.")
 
 
 @secrets_app.command("remove")

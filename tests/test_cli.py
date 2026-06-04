@@ -6,6 +6,7 @@ import fly_on_the_wall.cli_speaker_review as cli_speaker_review
 import fly_on_the_wall.setup as setup_wizard
 from fly_on_the_wall.cli import app
 from fly_on_the_wall.doctor import DoctorCheck
+from fly_on_the_wall.secrets import SecretError
 
 runner = CliRunner()
 
@@ -67,6 +68,18 @@ def test_setup_can_skip_optional_configuration(monkeypatch, tmp_path) -> None:
     assert result.exit_code == 0
     assert "Setup summary" in result.stdout
     assert "Required setup: incomplete" in result.stdout
+
+
+def test_secrets_set_prints_env_fallback_when_keyring_fails(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "fly_on_the_wall.cli.set_api_key",
+        lambda provider, value: (_ for _ in ()).throw(SecretError("keyring failed")),
+    )
+
+    result = runner.invoke(app, ["secrets", "set", "openai"], input="dummy\n")
+
+    assert result.exit_code != 0
+    assert "Alternative: set OPENAI_API_KEY" in result.stdout
 
 
 def test_people_set_user_command_exists() -> None:

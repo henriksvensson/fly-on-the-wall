@@ -23,7 +23,7 @@ def test_load_config_reads_yaml_overrides(tmp_path: Path) -> None:
     config_path.write_text(
         "\n".join(
             [
-                "default_transcription_provider: speechmatics",
+                "default_transcription_provider: openai",
                 "language: en",
                 f"export_destination: {tmp_path / 'exports'}",
                 "cleanup_mode: deterministic",
@@ -36,7 +36,7 @@ def test_load_config_reads_yaml_overrides(tmp_path: Path) -> None:
 
     config = load_config(config_path)
 
-    assert config.default_transcription_provider == "speechmatics"
+    assert config.default_transcription_provider == "openai"
     assert config.language == "en"
     assert config.export_destination == tmp_path / "exports"
     assert config.cleanup_mode == "deterministic"
@@ -49,6 +49,14 @@ def test_load_config_rejects_non_mapping_yaml(tmp_path: Path) -> None:
     config_path.write_text("- not\n- a\n- mapping\n")
 
     with pytest.raises(ConfigError, match="must be a YAML mapping"):
+        load_config(config_path)
+
+
+def test_load_config_rejects_unsupported_provider(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("default_transcription_provider: deepgram\n")
+
+    with pytest.raises(ConfigError, match="Invalid config"):
         load_config(config_path)
 
 

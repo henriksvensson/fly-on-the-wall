@@ -13,7 +13,7 @@ from fly_on_the_wall.doctor import run_checks
 from fly_on_the_wall.people import create_person, get_person, get_user_person, set_user_person
 from fly_on_the_wall.people_embeddings import people_embedding_status
 from fly_on_the_wall.publishing import add_publish_target, list_publish_targets
-from fly_on_the_wall.secrets import SecretError, get_api_key_status, known_providers, set_api_key
+from fly_on_the_wall.secrets import SecretError, get_api_key_status, set_api_key
 from fly_on_the_wall.storage import storage_paths
 from fly_on_the_wall.watch import add_watch_folder, list_watch_folders
 
@@ -54,9 +54,6 @@ def _setup_secrets(console: Console) -> None:
     for provider in ["elevenlabs", "openai"]:
         _setup_secret(console, provider)
 
-    other_providers = [provider for provider in known_providers() if provider not in {"elevenlabs", "openai"}]
-    if other_providers:
-        console.print("Other provider keys can be configured later with `fot secrets set <provider>`.")
     console.print("")
 
 
@@ -76,8 +73,15 @@ def _setup_secret(console: Console, provider: str) -> None:
         set_api_key(provider, value)
     except SecretError as exc:
         console.print(str(exc))
+        _print_secret_env_fallback(console, provider)
         return
     console.print(f"- {provider}: stored in OS keyring")
+
+
+def _print_secret_env_fallback(console: Console, provider: str) -> None:
+    status = get_api_key_status(provider)
+    if status.env_var:
+        console.print(f"  Alternative: set {status.env_var} in your shell environment.")
 
 
 def _setup_user_identity(console: Console) -> None:
