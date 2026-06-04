@@ -333,7 +333,7 @@ Analysis output sections:
 - Do not overwrite prior internal exports.
 - Export Markdown first.
 - Current immutable export includes `transcript.md`, `analysis.md`, and `manifest.json`.
-- Generated transcript Markdown is output, not editable source of truth.
+- Generated manuscript Markdown is output, not editable source of truth.
 - Track export timestamp, input artifact references, and hashes where practical.
 - External publishing is mutable and idempotent.
 - Obsidian publishing stores the published path so title changes do not create duplicate notes.

@@ -16,6 +16,10 @@ def test_cleanup_transcript_calls_openai_and_returns_content() -> None:
         body = request.read().decode()
         assert "Person B" in body
         assert "Example Company" in body
+        assert "manuscript-style dialogue" in body
+        assert "filler/discourse-marker words" in body
+        assert "liksom" in body
+        assert "clear literal/comparative" in body
         return httpx.Response(
             200,
             json={"choices": [{"message": {"content": "Person B: Hej där."}}]},

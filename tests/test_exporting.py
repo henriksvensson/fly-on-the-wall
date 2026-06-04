@@ -35,7 +35,7 @@ def test_export_markdown_transcript_writes_immutable_snapshot(tmp_path: Path) ->
         "Location: Unknown\n"
         "Position: Unknown\n"
         "People: Person B, Unknown speaker 1\n\n"
-        "## Transcript\n\n"
+        "## Manuscript\n\n"
         "**Person B:** Hej\n\n"
         "**Unknown speaker 1:** Hallå\n"
     )

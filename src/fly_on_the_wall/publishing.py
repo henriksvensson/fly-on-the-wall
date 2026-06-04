@@ -309,7 +309,7 @@ def _obsidian_note(meeting: dict, transcript_markdown: str, analysis_markdown: s
     lines.append("")
     lines.append(_strip_top_heading(analysis_markdown, "Meeting Analysis"))
     lines.append("")
-    lines.append("## Transcript")
+    lines.append("## Manuscript")
     lines.append("")
     lines.append(_strip_transcript_heading(transcript_markdown))
     return "\n".join(lines).rstrip() + "\n"
@@ -346,9 +346,9 @@ def _strip_transcript_heading(markdown: str) -> str:
     lines = markdown.strip().splitlines()
     if lines and lines[0].startswith("# "):
         lines = lines[1:]
-    while lines and lines[0].strip() != "## Transcript":
+    while lines and lines[0].strip() not in {"## Transcript", "## Manuscript"}:
         lines.pop(0)
-    if lines and lines[0].strip() == "## Transcript":
+    if lines and lines[0].strip() in {"## Transcript", "## Manuscript"}:
         lines.pop(0)
     return "\n".join(lines).strip()
 

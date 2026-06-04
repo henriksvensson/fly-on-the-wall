@@ -24,7 +24,7 @@ The tool is designed for one person running it locally. There is no hosted servi
 
 Final user-facing exports include:
 
-- `transcript.md`: cleaned readable transcript.
+- `transcript.md`: cleaned readable manuscript.
 - `analysis.md`: summary, decisions, action items, open questions, and important details.
 - `manifest.json`: internal metadata about the export.
 

@@ -93,7 +93,7 @@ def _markdown_document(meeting: dict, transcript: str) -> str:
         "Position: Unknown",
         f"People: {', '.join(people) if people else 'Unknown'}",
         "",
-        "## Transcript",
+        "## Manuscript",
         "",
     ]
     for speaker, text in turns:

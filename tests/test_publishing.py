@@ -68,6 +68,8 @@ def test_publish_meeting_writes_and_updates_obsidian_note(tmp_path: Path) -> Non
     assert published_count == 1
     assert "title: Renamed Call" in note
     assert "Updated discussion." in note
+    assert "## Manuscript" in note
+    assert "## Transcript" not in note
     assert "**Person B:** Hej där alla igen" in note
     assert "managed by Fly on the Wall" in note
 
@@ -224,4 +226,6 @@ def test_publish_meeting_handles_legacy_manifest_without_analysis_path(tmp_path:
 
     note = result.output_path.read_text()
     assert "No analysis export found" in note
+    assert "## Manuscript" in note
+    assert "## Transcript" not in note
     assert "**Person B:** Hej" in note

@@ -9,7 +9,7 @@ from fly_on_the_wall.secrets import get_api_key
 API_URL = "https://api.openai.com/v1/chat/completions"
 DEFAULT_MODEL = "gpt-5.4-mini"
 DEFAULT_CLEANUP_TIMEOUT_SECONDS = 1800
-CLEANUP_PROMPT_VERSION = "2026-06-02-mini-general-cleanup-v3"
+CLEANUP_PROMPT_VERSION = "2026-06-04-manuscript-cleanup-v4"
 
 
 class OpenAICleanupError(RuntimeError):
@@ -63,14 +63,21 @@ def _system_prompt(glossary_terms: list[str] | None, meeting_context: str | None
     glossary = ", ".join(glossary_terms or []) or "none"
     context = meeting_context or "none"
     return f"""
-You lightly clean meeting transcripts for readability.
+You clean meeting transcripts into readable manuscript-style dialogue.
 Preserve speaker names, speaker order, source labels, language, and meaning.
-Fix punctuation, casing, obvious spacing, and lightly broken phrasing.
-Remove obvious filler words, hesitation sounds, and repeated false starts when they do not
-change meaning.
+Make the transcript pleasant to read rather than word-for-word: fix punctuation, casing,
+obvious spacing, and lightly broken phrasing.
+Remove verbal tics, hesitation sounds, repeated false starts, repeated words, and
+filler/discourse-marker words when they only function as speaking habits rather than meaning.
+For Swedish transcripts, words such as "liksom", "alltså", "såhär", "du vet", "eh" and
+"äh" are usually conversational fillers. Default to removing them when the sentence still
+means the same thing without them. Keep them only when they are inside quoted wording, part
+of an idiom, or used with clear literal/comparative meaning, such as "på samma sätt som" or
+"som om". Do not keep them for vague emphasis, hesitation, self-correction, or rhythm.
+Prefer complete readable sentences over literal STT fragments, but do not summarize,
+invent details, remove uncertainty markers, or add new content.
 Preserve standalone acknowledgements such as yes/no/okay/mm and Swedish ja/nej/okej/mm.
-Do not summarize, invent details, remove uncertainty markers, or add new content.
-Return only the cleaned transcript.
+Return only the cleaned manuscript.
 Meeting context: {context}
 Glossary terms: {glossary}
 """.strip()
