@@ -16,7 +16,7 @@
 - Use SQLite for local metadata, state, indexing, pricing, usage, and pipeline progress.
 - Use filesystem artifacts for large auditable data such as provider responses, cached LLM outputs, exports, and voice samples.
 - Use httpx for provider HTTP calls.
-- Use pyannote.audio, torch, and torchaudio for local speaker embeddings.
+- Use optional pyannote.audio, torch, and torchaudio dependencies for local speaker embeddings.
 - Use uv for dependency and packaging workflow.
 - Use pytest and Ruff for validation.
 

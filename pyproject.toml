@@ -1,22 +1,40 @@
 [project]
 name = "fly-on-the-wall"
 version = "0.1.0"
-description = "Personal CLI note-taker for turning meeting audio into named, cleaned Markdown transcripts."
+description = "Personal CLI note-taker for turning meeting audio into cleaned meeting manuscripts."
 readme = "README.md"
 requires-python = ">=3.12"
+license = "MIT"
 dependencies = [
     "httpx>=0.28.0",
     "keyring>=25.5.0",
     "pydantic>=2.10.0",
-    "pyannote.audio>=3.3.0",
     "pyyaml>=6.0.0",
     "rich>=13.7.0",
-    "torch>=2.3.0",
-    "torchaudio>=2.3.0",
     "typer>=0.12.0",
     "watchfiles>=1.0.0",
     "prompt-toolkit>=3.0.52",
 ]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Office/Business",
+]
+
+[project.optional-dependencies]
+identity = [
+    "pyannote.audio>=3.3.0",
+    "torch>=2.3.0",
+    "torchaudio>=2.3.0",
+]
+
+[project.urls]
+Repository = "https://github.com/person_a/fly-on-the-wall"
 
 [project.scripts]
 fot = "fly_on_the_wall.cli:app"
@@ -31,6 +49,9 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fly_on_the_wall"]
 
 [tool.ruff]
 line-length = 120

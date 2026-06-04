@@ -118,9 +118,11 @@ def _setup_speaker_identity(console: Console) -> None:
 
     console.print("- local speaker identity dependencies: missing")
     if typer.confirm("Do you want guidance for enabling recurring speaker identity?", default=True):
-        console.print("Install the package with the identity extra, then rerun setup:")
+        console.print("Install or upgrade the package with the identity extra, then rerun setup:")
         console.print('  uv tool install "fly-on-the-wall[identity]"')
+        console.print('  uv tool upgrade --reinstall "fly-on-the-wall[identity]"')
         console.print('  pipx install "fly-on-the-wall[identity]"')
+        console.print('  pipx inject fly-on-the-wall "fly-on-the-wall[identity]"')
         console.print("If you installed from source, run `uv sync --extra identity`.")
     console.print("")
 

@@ -75,7 +75,7 @@ def _speaker_embedding_checks() -> list[DoctorCheck]:
             detail=(
                 "available for speaker embeddings"
                 if pyannote_available
-                else "missing; install pyannote.audio, torch, and torchaudio"
+                else "missing; install the identity extra for local speaker embeddings"
             ),
         ),
         DoctorCheck(

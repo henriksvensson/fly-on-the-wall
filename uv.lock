@@ -572,14 +572,18 @@ dependencies = [
     { name = "httpx" },
     { name = "keyring" },
     { name = "prompt-toolkit" },
-    { name = "pyannote-audio" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "rich" },
-    { name = "torch" },
-    { name = "torchaudio" },
     { name = "typer" },
     { name = "watchfiles" },
+]
+
+[package.optional-dependencies]
+identity = [
+    { name = "pyannote-audio" },
+    { name = "torch" },
+    { name = "torchaudio" },
 ]
 
 [package.dev-dependencies]
@@ -594,15 +598,16 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "keyring", specifier = ">=25.5.0" },
     { name = "prompt-toolkit", specifier = ">=3.0.52" },
-    { name = "pyannote-audio", specifier = ">=3.3.0" },
+    { name = "pyannote-audio", marker = "extra == 'identity'", specifier = ">=3.3.0" },
     { name = "pydantic", specifier = ">=2.10.0" },
     { name = "pyyaml", specifier = ">=6.0.0" },
     { name = "rich", specifier = ">=13.7.0" },
-    { name = "torch", specifier = ">=2.3.0" },
-    { name = "torchaudio", specifier = ">=2.3.0" },
+    { name = "torch", marker = "extra == 'identity'", specifier = ">=2.3.0" },
+    { name = "torchaudio", marker = "extra == 'identity'", specifier = ">=2.3.0" },
     { name = "typer", specifier = ">=0.12.0" },
     { name = "watchfiles", specifier = ">=1.0.0" },
 ]
+provides-extras = ["identity"]
 
 [package.metadata.requires-dev]
 dev = [

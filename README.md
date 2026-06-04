@@ -38,11 +38,36 @@ Speaker identity matching uses local embeddings via `pyannote.audio` / `pyannote
 
 ## Installation
 
-This project uses `uv`.
+Install the CLI with `uv tool`:
+
+```bash
+uv tool install fly-on-the-wall
+fot setup
+```
+
+Speaker identity matching is optional and adds heavier local ML dependencies:
+
+```bash
+uv tool install "fly-on-the-wall[identity]"
+```
+
+If you already installed the base CLI with `uv tool`, upgrade it with the optional extra:
+
+```bash
+uv tool upgrade --reinstall "fly-on-the-wall[identity]"
+```
+
+Development from a source checkout also uses `uv`:
 
 ```bash
 uv sync
 uv run fot
+```
+
+Include speaker identity dependencies during local development with:
+
+```bash
+uv sync --extra identity
 ```
 
 You can point `fot` at `uv run fot` with a shell alias:
@@ -320,6 +345,25 @@ Run lint and formatting checks:
 ```bash
 uv run ruff check .
 uv run ruff format --check .
+```
+
+Build distribution artifacts:
+
+```bash
+uv build
+```
+
+Test a built wheel locally:
+
+```bash
+uv tool install dist/fly_on_the_wall-0.1.0-py3-none-any.whl
+fot setup
+```
+
+Publish to PyPI after verifying the build, package name, and license metadata:
+
+```bash
+uv publish
 ```
 
 Architecture notes live in:
