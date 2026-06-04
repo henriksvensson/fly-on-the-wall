@@ -116,9 +116,7 @@ def remove_watch_folder(connection: Connection, identifier: str) -> WatchFolder 
     return folder
 
 
-def set_watch_folder_enabled(
-    connection: Connection, identifier: str, enabled: bool
-) -> WatchFolder | None:
+def set_watch_folder_enabled(connection: Connection, identifier: str, enabled: bool) -> WatchFolder | None:
     folder = get_watch_folder(connection, identifier)
     if folder is None:
         return None
@@ -143,9 +141,7 @@ def scan_watch_folders(
     progress: ProgressFn | None = None,
 ) -> WatchScanResult:
     seen = processed = ignored = skipped = failed = 0
-    context = WatchScanContext(
-        connection, config, storage, process_fn, stable_age_seconds, time.time(), progress
-    )
+    context = WatchScanContext(connection, config, storage, process_fn, stable_age_seconds, time.time(), progress)
 
     for folder in list_watch_folders(connection):
         if not folder.enabled:
@@ -162,9 +158,7 @@ def scan_watch_folders(
             skipped += result.skipped
             failed += result.failed
 
-    return WatchScanResult(
-        seen=seen, processed=processed, ignored=ignored, skipped=skipped, failed=failed
-    )
+    return WatchScanResult(seen=seen, processed=processed, ignored=ignored, skipped=skipped, failed=failed)
 
 
 def _resolve_folder_path(path: Path) -> Path:
@@ -290,11 +284,7 @@ def _item_final_for_current_file(connection: Connection, file: WatchFile) -> boo
 
 def _item_seen_unchanged(connection: Connection, file: WatchFile) -> bool:
     item = _watch_item(connection, file.path)
-    return bool(
-        item is not None
-        and item["size_bytes"] == file.size_bytes
-        and item["mtime_ns"] == file.mtime_ns
-    )
+    return bool(item is not None and item["size_bytes"] == file.size_bytes and item["mtime_ns"] == file.mtime_ns)
 
 
 def _mark_item_processing(connection: Connection, item: WatchFile, file_hash: str) -> None:
@@ -323,9 +313,7 @@ def _mark_item_done(connection: Connection, path: Path, meeting_id: str) -> None
         )
 
 
-def _mark_item_ignored(
-    connection: Connection, path: Path, meeting_id: str, reason: str
-) -> None:
+def _mark_item_ignored(connection: Connection, path: Path, meeting_id: str, reason: str) -> None:
     with connection:
         connection.execute(
             """

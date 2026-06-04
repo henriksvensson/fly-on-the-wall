@@ -13,9 +13,7 @@ class FakeBackend:
         return [1.0, 0.0]
 
 
-def test_create_voice_identity_from_speaker_creates_sample_and_embeddings(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_create_voice_identity_from_speaker_creates_sample_and_embeddings(tmp_path: Path, monkeypatch) -> None:
     source_audio_path = tmp_path / "meeting.m4a"
     source_audio_path.write_bytes(b"audio")
     storage = ensure_storage_layout(tmp_path / "storage")
@@ -50,9 +48,7 @@ def test_create_voice_identity_from_speaker_creates_sample_and_embeddings(
     assert local_embedding["embedding_path"] is not None
 
 
-def test_create_voice_identity_from_speaker_can_create_person(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_create_voice_identity_from_speaker_can_create_person(tmp_path: Path, monkeypatch) -> None:
     source_audio_path = tmp_path / "meeting.m4a"
     source_audio_path.write_bytes(b"audio")
     storage = ensure_storage_layout(tmp_path / "storage")

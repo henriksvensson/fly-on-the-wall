@@ -52,9 +52,7 @@ class RecordingIgnoredError(RuntimeError):
         self.quality = quality
 
 
-def assess_before_transcription(
-    connection: Connection, meeting: Meeting
-) -> RecordingQuality | None:
+def assess_before_transcription(connection: Connection, meeting: Meeting) -> RecordingQuality | None:
     duration = _duration_seconds(connection, meeting.id)
     if duration is None:
         return None
@@ -103,9 +101,7 @@ def assess_after_transcription(
     return RecordingQuality("normal", "passed_quality_checks", details)
 
 
-def store_recording_quality(
-    connection: Connection, meeting_id: str, quality: RecordingQuality
-) -> None:
+def store_recording_quality(connection: Connection, meeting_id: str, quality: RecordingQuality) -> None:
     with connection:
         connection.execute(
             """

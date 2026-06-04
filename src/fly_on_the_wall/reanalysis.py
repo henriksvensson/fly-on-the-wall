@@ -99,9 +99,7 @@ def rerun_speaker_matching_for_meetings(
         changed_count = rerun_speaker_matching(connection, meeting["id"], progress)
         stages = mark_speaker_reanalysis_stale(connection, meeting["id"]) if changed_count else []
         if progress is not None:
-            progress(
-                f"{meeting['slug']}: {changed_count} speaker assignment change(s)"
-            )
+            progress(f"{meeting['slug']}: {changed_count} speaker assignment change(s)")
         results.append(
             {
                 "meeting_id": meeting["id"],
@@ -113,9 +111,7 @@ def rerun_speaker_matching_for_meetings(
     return results
 
 
-def _speaker_reanalysis_meetings(
-    connection: Connection, include_known_speakers: bool
-) -> list[dict]:
+def _speaker_reanalysis_meetings(connection: Connection, include_known_speakers: bool) -> list[dict]:
     if include_known_speakers:
         rows = connection.execute(
             """
@@ -143,9 +139,7 @@ def _speaker_reanalysis_meetings(
     return [dict(row) for row in rows]
 
 
-def _speaker_assignment_snapshot(
-    connection: Connection, provider_run_id: str
-) -> dict[str, tuple]:
+def _speaker_assignment_snapshot(connection: Connection, provider_run_id: str) -> dict[str, tuple]:
     rows = connection.execute(
         """
         SELECT local_speakers.id AS local_speaker_id,
@@ -175,6 +169,4 @@ def _speaker_assignment_snapshot(
 
 
 def _changed_assignment_count(before: dict[str, tuple], after: dict[str, tuple]) -> int:
-    return sum(
-        1 for speaker_id, assignment in after.items() if before.get(speaker_id) != assignment
-    )
+    return sum(1 for speaker_id, assignment in after.items() if before.get(speaker_id) != assignment)

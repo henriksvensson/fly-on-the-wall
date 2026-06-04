@@ -26,9 +26,7 @@ def create_person(connection: Connection, display_name: str) -> Person:
 
 
 def list_people(connection: Connection) -> list[Person]:
-    rows = connection.execute(
-        "SELECT id, display_name, is_user FROM people ORDER BY display_name"
-    ).fetchall()
+    rows = connection.execute("SELECT id, display_name, is_user FROM people ORDER BY display_name").fetchall()
     return [_person_from_row(row) for row in rows]
 
 
@@ -46,9 +44,7 @@ def get_person(connection: Connection, person_id_or_name: str) -> Person | None:
 
 
 def get_user_person(connection: Connection) -> Person | None:
-    row = connection.execute(
-        "SELECT id, display_name, is_user FROM people WHERE is_user = 1 LIMIT 1"
-    ).fetchone()
+    row = connection.execute("SELECT id, display_name, is_user FROM people WHERE is_user = 1 LIMIT 1").fetchone()
     return None if row is None else _person_from_row(row)
 
 

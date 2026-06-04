@@ -5,9 +5,7 @@ import pytest
 from fly_on_the_wall.config import ConfigError, get_api_key, load_config
 
 
-def test_load_config_uses_defaults_when_file_is_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_load_config_uses_defaults_when_file_is_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config-home"))
 
     config = load_config()

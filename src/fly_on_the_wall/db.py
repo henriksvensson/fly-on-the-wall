@@ -398,10 +398,7 @@ DEFAULT_SERVICE_PRICES = (
             "litellm_fallback_key": "elevenlabs/scribe_v1",
             "inferred_for_model": "scribe_v2",
             "litellm_price_fields": {"input_cost_per_second": 0.0000611},
-            "note": (
-                "Exact scribe_v2 entry was not present in LiteLLM; "
-                "seeded from Scribe pricing fallback."
-            ),
+            "note": ("Exact scribe_v2 entry was not present in LiteLLM; " "seeded from Scribe pricing fallback."),
         },
     },
 )
@@ -441,12 +438,8 @@ def initialize_database(connection: sqlite3.Connection) -> None:
         _seed_default_service_prices(connection)
 
 
-def _ensure_column(
-    connection: sqlite3.Connection, table_name: str, column_name: str, definition: str
-) -> None:
-    columns = {
-        row["name"] for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()
-    }
+def _ensure_column(connection: sqlite3.Connection, table_name: str, column_name: str, definition: str) -> None:
+    columns = {row["name"] for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()}
     if column_name not in columns:
         connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
 

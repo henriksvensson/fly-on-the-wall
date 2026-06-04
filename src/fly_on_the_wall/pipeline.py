@@ -53,9 +53,7 @@ def run_stage(connection: Connection, meeting_id: str, stage: Stage) -> None:
     set_stage_status(connection, meeting_id, stage.name, DONE)
 
 
-def get_stage_status(
-    connection: Connection, meeting_id: str, stage_name: str
-) -> StageStatus | None:
+def get_stage_status(connection: Connection, meeting_id: str, stage_name: str) -> StageStatus | None:
     row = connection.execute(
         "SELECT status FROM pipeline_stages WHERE meeting_id = ? AND stage_name = ?",
         (meeting_id, stage_name),

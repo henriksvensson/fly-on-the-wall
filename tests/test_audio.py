@@ -38,9 +38,7 @@ def test_probe_metadata_uses_ffprobe_json(monkeypatch: pytest.MonkeyPatch) -> No
     assert "-print_format" in commands[0]
 
 
-def test_normalize_for_embedding_builds_expected_command(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_normalize_for_embedding_builds_expected_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     commands: list[list[str]] = []
 
     def fake_run(command: list[str], **kwargs) -> subprocess.CompletedProcess[str]:

@@ -69,9 +69,7 @@ def create_voice_identity_from_speaker(
     embedded = False
     if backend is not None:
         cache_voice_sample_embedding(connection, sample.id, backend, paths)
-        cache_local_speaker_embedding(
-            connection, local_speaker_id, sample.audio_path, backend, paths
-        )
+        cache_local_speaker_embedding(connection, local_speaker_id, sample.audio_path, backend, paths)
         embedded = True
 
     return VoiceIdentityResult(
@@ -136,9 +134,7 @@ def match_provider_run_speakers(
 
 def _has_voice_sample_embeddings(connection: Connection) -> bool:
     return (
-        connection.execute(
-            "SELECT 1 FROM voice_samples WHERE embedding_path IS NOT NULL LIMIT 1"
-        ).fetchone()
+        connection.execute("SELECT 1 FROM voice_samples WHERE embedding_path IS NOT NULL LIMIT 1").fetchone()
         is not None
     )
 

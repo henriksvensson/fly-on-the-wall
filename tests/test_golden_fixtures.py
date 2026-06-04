@@ -22,13 +22,11 @@ def test_golden_provider_json_to_named_transcript(tmp_path: Path) -> None:
             """,
             ("run-1", "meeting-1", "elevenlabs", "scribe_v2", str(raw_path), "done"),
         )
-        connection.execute(
-            "INSERT INTO people(id, display_name) VALUES (?, ?)", ("person-1", "Person B")
-        )
+        connection.execute("INSERT INTO people(id, display_name) VALUES (?, ?)", ("person-1", "Person B"))
         normalize_provider_run(connection, "run-1")
-        speaker_id = connection.execute(
-            "SELECT id FROM local_speakers WHERE label = ?", ("speaker_0",)
-        ).fetchone()["id"]
+        speaker_id = connection.execute("SELECT id FROM local_speakers WHERE label = ?", ("speaker_0",)).fetchone()[
+            "id"
+        ]
         connection.execute(
             """
             INSERT INTO speaker_assignments(id, local_speaker_id, person_id, status)

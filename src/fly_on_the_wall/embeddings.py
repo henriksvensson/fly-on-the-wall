@@ -85,12 +85,7 @@ def cache_local_speaker_embedding(
     backend: EmbeddingBackend,
     storage: StoragePaths | None = None,
 ) -> CachedEmbedding:
-    if (
-        connection.execute(
-            "SELECT 1 FROM local_speakers WHERE id = ?", (local_speaker_id,)
-        ).fetchone()
-        is None
-    ):
+    if connection.execute("SELECT 1 FROM local_speakers WHERE id = ?", (local_speaker_id,)).fetchone() is None:
         raise ValueError(f"Local speaker does not exist: {local_speaker_id}")
 
     paths = storage or storage_paths()
@@ -139,9 +134,7 @@ def cosine_similarity(left: list[float], right: list[float]) -> float:
     return numerator / (left_norm * right_norm)
 
 
-def _write_embedding(
-    directory: Path, source_id: str, model_name: str, vector: list[float]
-) -> Path:
+def _write_embedding(directory: Path, source_id: str, model_name: str, vector: list[float]) -> Path:
     safe_model_name = model_name.replace("/", "--")
     path = directory / f"{source_id}.{safe_model_name}.json"
     path.parent.mkdir(parents=True, exist_ok=True)

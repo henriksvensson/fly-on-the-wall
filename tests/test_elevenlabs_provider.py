@@ -51,12 +51,8 @@ def test_run_transcription_stores_raw_response_and_provider_run(tmp_path: Path) 
             "INSERT INTO meetings(id, slug, title, language) VALUES (?, ?, ?, ?)",
             ("meeting-1", "meeting-1", "Meeting", "sv"),
         )
-        provider_run_id = run_transcription(
-            connection, "meeting-1", audio_path, storage, client, api_key="test-key"
-        )
-        row = connection.execute(
-            "SELECT * FROM provider_runs WHERE id = ?", (provider_run_id,)
-        ).fetchone()
+        provider_run_id = run_transcription(connection, "meeting-1", audio_path, storage, client, api_key="test-key")
+        row = connection.execute("SELECT * FROM provider_runs WHERE id = ?", (provider_run_id,)).fetchone()
         usage = connection.execute("SELECT * FROM service_usage").fetchone()
 
     assert row["provider"] == "elevenlabs"

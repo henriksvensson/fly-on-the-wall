@@ -149,15 +149,11 @@ def get_meeting(connection: Connection, meeting_id_or_slug: str) -> dict | None:
 
 
 def get_meeting_by_audio_sha256(connection: Connection, audio_sha256: str) -> dict | None:
-    row = connection.execute(
-        "SELECT * FROM meetings WHERE audio_sha256 = ?", (audio_sha256,)
-    ).fetchone()
+    row = connection.execute("SELECT * FROM meetings WHERE audio_sha256 = ?", (audio_sha256,)).fetchone()
     return None if row is None else dict(row)
 
 
-def latest_completed_provider_run(
-    connection: Connection, meeting_id: str, provider: str = "elevenlabs"
-) -> dict | None:
+def latest_completed_provider_run(connection: Connection, meeting_id: str, provider: str = "elevenlabs") -> dict | None:
     row = connection.execute(
         """
         SELECT * FROM provider_runs
@@ -176,9 +172,7 @@ def update_generated_title(connection: Connection, meeting_id: str, generated_ti
         return
 
     with connection:
-        row = connection.execute(
-            "SELECT title_source FROM meetings WHERE id = ?", (meeting_id,)
-        ).fetchone()
+        row = connection.execute("SELECT title_source FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
         if row is None:
             raise ValueError(f"Meeting not found: {meeting_id}")
 
@@ -287,9 +281,7 @@ def delete_meeting(
     )
 
 
-def _meeting_owned_paths(
-    connection: Connection, meeting: dict, storage: StoragePaths
-) -> list[Path]:
+def _meeting_owned_paths(connection: Connection, meeting: dict, storage: StoragePaths) -> list[Path]:
     paths = [
         storage.audio / meeting["slug"],
         storage.artifacts / meeting["id"],
@@ -324,9 +316,7 @@ def _meeting_owned_paths(
 def _local_speaker_ids(connection: Connection, meeting_id: str) -> list[str]:
     return [
         row["id"]
-        for row in connection.execute(
-            "SELECT id FROM local_speakers WHERE meeting_id = ?", (meeting_id,)
-        ).fetchall()
+        for row in connection.execute("SELECT id FROM local_speakers WHERE meeting_id = ?", (meeting_id,)).fetchall()
     ]
 
 
@@ -339,9 +329,7 @@ def _meeting_voice_sample_ids(connection: Connection, meeting_id: str) -> list[s
     ]
 
 
-def _delete_corrections(
-    connection: Connection, meeting_id: str, local_speaker_ids: list[str]
-) -> None:
+def _delete_corrections(connection: Connection, meeting_id: str, local_speaker_ids: list[str]) -> None:
     connection.execute("DELETE FROM corrections WHERE meeting_id = ?", (meeting_id,))
     if local_speaker_ids:
         placeholders = ", ".join("?" for _ in local_speaker_ids)

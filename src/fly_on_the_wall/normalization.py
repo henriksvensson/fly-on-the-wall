@@ -20,9 +20,7 @@ class NormalizedSegment:
 
 
 def normalize_provider_run(connection: Connection, provider_run_id: str) -> list[NormalizedSegment]:
-    provider_run = connection.execute(
-        "SELECT * FROM provider_runs WHERE id = ?", (provider_run_id,)
-    ).fetchone()
+    provider_run = connection.execute("SELECT * FROM provider_runs WHERE id = ?", (provider_run_id,)).fetchone()
     if provider_run is None:
         raise ValueError(f"Provider run does not exist: {provider_run_id}")
 
@@ -76,9 +74,7 @@ def normalize_elevenlabs_response(response: dict[str, Any]) -> list[NormalizedSe
     sequence = 0
     for transcript in _iter_transcripts(response):
         for speaker_label, words in _speaker_word_groups(transcript.get("words", [])):
-            segment = _build_segment(
-                sequence, speaker_label, words, transcript.get("language_code")
-            )
+            segment = _build_segment(sequence, speaker_label, words, transcript.get("language_code"))
             if segment is None:
                 continue
             normalized.append(segment)
@@ -135,9 +131,7 @@ def _iter_transcripts(response: dict[str, Any]) -> list[dict[str, Any]]:
     return [response]
 
 
-def _ensure_local_speaker(
-    connection: Connection, meeting_id: str, provider_run_id: str, label: str
-) -> str:
+def _ensure_local_speaker(connection: Connection, meeting_id: str, provider_run_id: str, label: str) -> str:
     row = connection.execute(
         "SELECT id FROM local_speakers WHERE provider_run_id = ? AND label = ?",
         (provider_run_id, label),

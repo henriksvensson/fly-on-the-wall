@@ -63,9 +63,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 people_app = typer.Typer(help="Manage known people.", no_args_is_help=True)
-people_embeddings_app = typer.Typer(
-    help="Manage known people's voice embeddings.", no_args_is_help=True
-)
+people_embeddings_app = typer.Typer(help="Manage known people's voice embeddings.", no_args_is_help=True)
 meetings_app = typer.Typer(help="Inspect meetings.", no_args_is_help=True)
 meeting_speakers_app = typer.Typer(
     help="Review meeting-local speakers and assign them to people.",
@@ -125,12 +123,8 @@ def doctor() -> None:
 @app.command()
 def process(
     audio_path: Annotated[Path, typer.Argument(exists=True, file_okay=True, dir_okay=False)],
-    title: Annotated[
-        str | None, typer.Option("--title", "-t", help="Manual meeting title override.")
-    ] = None,
-    description: Annotated[
-        str | None, typer.Option("--description", "-d", help="Meeting context.")
-    ] = None,
+    title: Annotated[str | None, typer.Option("--title", "-t", help="Manual meeting title override.")] = None,
+    description: Annotated[str | None, typer.Option("--description", "-d", help="Meeting context.")] = None,
 ) -> None:
     """Process audio from import through markdown export."""
     config = load_config()
@@ -151,9 +145,7 @@ def process(
     console.print(f"Processed meeting {result.meeting.slug}")
     console.print(f"Transcript: {result.export.transcript_path}")
     console.print(f"Analysis: {result.export.analysis_path}")
-    console.print(
-        f"Review unknown speakers: fot meetings speakers unknown --meeting {result.meeting.slug}"
-    )
+    console.print(f"Review unknown speakers: fot meetings speakers unknown --meeting {result.meeting.slug}")
 
 
 @meetings_app.command("list")
@@ -211,9 +203,7 @@ def meetings_rename(meeting: str, title: str) -> None:
 @meetings_app.command("remove")
 def meetings_remove(
     meeting: str,
-    yes: Annotated[
-        bool, typer.Option("--yes", "-y", help="Delete without interactive confirmation.")
-    ] = False,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Delete without interactive confirmation.")] = False,
 ) -> None:
     """Completely remove a meeting and its stored files."""
     with database() as connection:
@@ -223,9 +213,7 @@ def meetings_remove(
             raise typer.Exit(code=1)
 
         if not yes:
-            confirmed = typer.confirm(
-                f"Delete meeting {found['slug']} and all stored data?", default=False
-            )
+            confirmed = typer.confirm(f"Delete meeting {found['slug']} and all stored data?", default=False)
             if not confirmed:
                 console.print("Cancelled.")
                 return
@@ -255,9 +243,7 @@ def meetings_status(meeting: str) -> None:
 
 @meeting_speakers_app.command("unknown")
 def speakers_unknown(
-    meeting: Annotated[
-        str | None, typer.Option("--meeting", "-m", help="Meeting ID or slug.")
-    ] = None,
+    meeting: Annotated[str | None, typer.Option("--meeting", "-m", help="Meeting ID or slug.")] = None,
 ) -> None:
     """List meeting-local speakers that are not assigned to people."""
     with database() as connection:
@@ -461,7 +447,7 @@ def people_list() -> None:
         people = list_people(connection)
 
     if not people:
-        console.print("No people found. Create one with: fot people create \"Name\"")
+        console.print('No people found. Create one with: fot people create "Name"')
         return
 
     table = Table(title="People")
@@ -581,10 +567,7 @@ def people_embeddings_backfill() -> None:
         console.print(str(exc))
         raise typer.Exit(code=1) from exc
 
-    console.print(
-        f"People voice embedding backfill complete: {result.embedded} embedded, "
-        f"{result.failed} failed."
-    )
+    console.print(f"People voice embedding backfill complete: {result.embedded} embedded, " f"{result.failed} failed.")
     if result.embedded:
         console.print("Next: fot refresh speakers")
 

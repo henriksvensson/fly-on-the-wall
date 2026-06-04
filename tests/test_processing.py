@@ -23,18 +23,14 @@ def test_process_audio_runs_to_markdown_export(tmp_path: Path) -> None:
     audio_path.write_bytes(b"audio")
     storage = ensure_storage_layout(tmp_path / "storage")
 
-    def fake_transcribe(
-        connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
-    ) -> str:
+    def fake_transcribe(connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths) -> str:
         raw_path = storage.artifacts / meeting_id / "raw.json"
         raw_path.parent.mkdir(parents=True, exist_ok=True)
         raw_path.write_text(
             json.dumps(
                 {
                     "language_code": "sv",
-                    "words": [
-                        {"speaker_id": "speaker_0", "text": "Hej", "start": 0, "end": 0.2}
-                    ],
+                    "words": [{"speaker_id": "speaker_0", "text": "Hej", "start": 0, "end": 0.2}],
                 }
             )
         )
@@ -69,9 +65,7 @@ def test_process_audio_reuses_existing_meeting_and_provider_run(tmp_path: Path) 
     storage = ensure_storage_layout(tmp_path / "storage")
     calls = 0
 
-    def fake_transcribe(
-        connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
-    ) -> str:
+    def fake_transcribe(connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths) -> str:
         nonlocal calls
         calls += 1
         raw_path = storage.artifacts / meeting_id / "raw.json"
@@ -80,9 +74,7 @@ def test_process_audio_reuses_existing_meeting_and_provider_run(tmp_path: Path) 
             json.dumps(
                 {
                     "language_code": "sv",
-                    "words": [
-                        {"speaker_id": "speaker_0", "text": "Hej", "start": 0, "end": 0.2}
-                    ],
+                    "words": [{"speaker_id": "speaker_0", "text": "Hej", "start": 0, "end": 0.2}],
                 }
             )
         )
@@ -95,9 +87,7 @@ def test_process_audio_reuses_existing_meeting_and_provider_run(tmp_path: Path) 
         )
         return "run-1"
 
-    def fail_if_called(
-        connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
-    ) -> str:
+    def fail_if_called(connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths) -> str:
         raise AssertionError("duplicate audio should reuse the completed provider run")
 
     with database(tmp_path / "fly.db") as connection:
@@ -117,9 +107,7 @@ def test_process_audio_reuses_existing_meeting_and_provider_run(tmp_path: Path) 
             storage,
             transcribe_fn=fail_if_called,
         )
-        meeting_count = connection.execute(
-            "SELECT COUNT(*) AS count FROM meetings"
-        ).fetchone()["count"]
+        meeting_count = connection.execute("SELECT COUNT(*) AS count FROM meetings").fetchone()["count"]
 
     assert first.meeting.id == second.meeting.id
     assert second.provider_run_id == "run-1"
@@ -137,18 +125,14 @@ def test_process_audio_reports_progress(tmp_path: Path, monkeypatch) -> None:
         lambda path: {"streams": [], "format": {"duration": "12.5", "size": "100"}},
     )
 
-    def fake_transcribe(
-        connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
-    ) -> str:
+    def fake_transcribe(connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths) -> str:
         raw_path = storage.artifacts / meeting_id / "raw.json"
         raw_path.parent.mkdir(parents=True, exist_ok=True)
         raw_path.write_text(
             json.dumps(
                 {
                     "language_code": "sv",
-                    "words": [
-                        {"speaker_id": "speaker_0", "text": "Hej", "start": 0, "end": 0.2}
-                    ],
+                    "words": [{"speaker_id": "speaker_0", "text": "Hej", "start": 0, "end": 0.2}],
                 }
             )
         )
@@ -176,10 +160,7 @@ def test_process_audio_reports_progress(tmp_path: Path, monkeypatch) -> None:
     assert any(message.startswith("Importing audio completed in ") for message in progress_messages)
     assert "Audio duration: 12s" in progress_messages
     assert "Transcribing audio with ElevenLabs" in progress_messages
-    assert any(
-        message.startswith("Transcribing audio with ElevenLabs completed in ")
-        for message in progress_messages
-    )
+    assert any(message.startswith("Transcribing audio with ElevenLabs completed in ") for message in progress_messages)
     assert "Exporting markdown" in progress_messages
     assert any(message.startswith("Done (") for message in progress_messages)
 
@@ -190,18 +171,14 @@ def test_process_audio_exports_when_openai_cleanup_fails(tmp_path: Path, monkeyp
     storage = ensure_storage_layout(tmp_path / "storage")
     progress_messages: list[str] = []
 
-    def fake_transcribe(
-        connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
-    ) -> str:
+    def fake_transcribe(connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths) -> str:
         raw_path = storage.artifacts / meeting_id / "raw.json"
         raw_path.parent.mkdir(parents=True, exist_ok=True)
         raw_path.write_text(
             json.dumps(
                 {
                     "language_code": "sv",
-                    "words": [
-                        {"speaker_id": "speaker_0", "text": "Hej", "start": 0, "end": 0.2}
-                    ],
+                    "words": [{"speaker_id": "speaker_0", "text": "Hej", "start": 0, "end": 0.2}],
                 }
             )
         )
@@ -241,27 +218,21 @@ def test_process_audio_exports_when_openai_cleanup_fails(tmp_path: Path, monkeyp
     assert any(message.startswith("OpenAI cleanup failed") for message in progress_messages)
 
 
-def test_process_audio_reuses_openai_cleanup_and_analysis_cache(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_process_audio_reuses_openai_cleanup_and_analysis_cache(tmp_path: Path, monkeypatch) -> None:
     audio_path = tmp_path / "meeting.m4a"
     audio_path.write_bytes(b"audio")
     storage = ensure_storage_layout(tmp_path / "storage")
     cleanup_calls = 0
     analysis_calls = 0
 
-    def fake_transcribe(
-        connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
-    ) -> str:
+    def fake_transcribe(connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths) -> str:
         raw_path = storage.artifacts / meeting_id / "raw.json"
         raw_path.parent.mkdir(parents=True, exist_ok=True)
         raw_path.write_text(
             json.dumps(
                 {
                     "language_code": "sv",
-                    "words": [
-                        {"speaker_id": "speaker_0", "text": "Hej", "start": 0, "end": 0.2}
-                    ],
+                    "words": [{"speaker_id": "speaker_0", "text": "Hej", "start": 0, "end": 0.2}],
                 }
             )
         )
@@ -313,25 +284,19 @@ def test_process_audio_reuses_openai_cleanup_and_analysis_cache(
     assert "Cached analysis." in second.export.analysis_path.read_text()
 
 
-def test_process_audio_cleanup_cache_includes_prompt_version(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_process_audio_cleanup_cache_includes_prompt_version(tmp_path: Path, monkeypatch) -> None:
     audio_path = tmp_path / "meeting.m4a"
     audio_path.write_bytes(b"audio")
     storage = ensure_storage_layout(tmp_path / "storage")
 
-    def fake_transcribe(
-        connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
-    ) -> str:
+    def fake_transcribe(connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths) -> str:
         raw_path = storage.artifacts / meeting_id / "raw.json"
         raw_path.parent.mkdir(parents=True, exist_ok=True)
         raw_path.write_text(
             json.dumps(
                 {
                     "language_code": "sv",
-                    "words": [
-                        {"speaker_id": "speaker_0", "text": "Hej", "start": 0, "end": 0.2}
-                    ],
+                    "words": [{"speaker_id": "speaker_0", "text": "Hej", "start": 0, "end": 0.2}],
                 }
             )
         )
@@ -363,9 +328,7 @@ def test_process_audio_cleanup_cache_includes_prompt_version(
             storage,
             transcribe_fn=fake_transcribe,
         )
-        monkeypatch.setattr(
-            "fly_on_the_wall.processing.CLEANUP_PROMPT_VERSION", "test-prompt-version-2"
-        )
+        monkeypatch.setattr("fly_on_the_wall.processing.CLEANUP_PROMPT_VERSION", "test-prompt-version-2")
         second = process_audio(
             connection,
             audio_path,
@@ -386,9 +349,7 @@ def test_refresh_meeting_reexports_without_transcription(tmp_path: Path) -> None
     storage = ensure_storage_layout(tmp_path / "storage")
     transcribe_calls = 0
 
-    def fake_transcribe(
-        connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
-    ) -> str:
+    def fake_transcribe(connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths) -> str:
         nonlocal transcribe_calls
         transcribe_calls += 1
         raw_path = storage.artifacts / meeting_id / "raw.json"
@@ -397,9 +358,7 @@ def test_refresh_meeting_reexports_without_transcription(tmp_path: Path) -> None
             json.dumps(
                 {
                     "language_code": "sv",
-                    "words": [
-                        {"speaker_id": "speaker_0", "text": "Hej", "start": 0, "end": 0.2}
-                    ],
+                    "words": [{"speaker_id": "speaker_0", "text": "Hej", "start": 0, "end": 0.2}],
                 }
             )
         )
@@ -437,25 +396,19 @@ def test_refresh_meeting_reexports_without_transcription(tmp_path: Path) -> None
     assert "**Person B:** Hej" in refreshed.export.transcript_path.read_text()
 
 
-def test_process_audio_applies_generated_title_for_filename_title(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_process_audio_applies_generated_title_for_filename_title(tmp_path: Path, monkeypatch) -> None:
     audio_path = tmp_path / "260603_100000.m4a"
     audio_path.write_bytes(b"audio")
     storage = ensure_storage_layout(tmp_path / "storage")
 
-    def fake_transcribe(
-        connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
-    ) -> str:
+    def fake_transcribe(connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths) -> str:
         raw_path = storage.artifacts / meeting_id / "raw.json"
         raw_path.parent.mkdir(parents=True, exist_ok=True)
         raw_path.write_text(
             json.dumps(
                 {
                     "language_code": "sv",
-                    "words": [
-                        {"speaker_id": "speaker_0", "text": "Example term", "start": 0, "end": 0.2}
-                    ],
+                    "words": [{"speaker_id": "speaker_0", "text": "Example term", "start": 0, "end": 0.2}],
                 }
             )
         )
@@ -487,9 +440,7 @@ def test_process_audio_applies_generated_title_for_filename_title(
             storage,
             transcribe_fn=fake_transcribe,
         )
-        row = connection.execute(
-            "SELECT * FROM meetings WHERE id = ?", (result.meeting.id,)
-        ).fetchone()
+        row = connection.execute("SELECT * FROM meetings WHERE id = ?", (result.meeting.id,)).fetchone()
 
     assert result.meeting.title == "Recruitment Planning"
     assert result.meeting.title_source == "generated"
@@ -503,9 +454,7 @@ def test_process_audio_keeps_manual_title_override(tmp_path: Path, monkeypatch) 
     storage = ensure_storage_layout(tmp_path / "storage")
     title_calls = 0
 
-    def fake_transcribe(
-        connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
-    ) -> str:
+    def fake_transcribe(connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths) -> str:
         raw_path = storage.artifacts / meeting_id / "raw.json"
         raw_path.parent.mkdir(parents=True, exist_ok=True)
         raw_path.write_text(

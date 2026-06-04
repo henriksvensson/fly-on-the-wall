@@ -12,10 +12,7 @@ def test_bootstrap_database_creates_file_and_schema(tmp_path: Path) -> None:
 
     with database(database_path) as connection:
         tables = {
-            row["name"]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            ).fetchall()
+            row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
 
     assert "schema_migrations" in tables
@@ -43,9 +40,7 @@ def test_bootstrap_database_adds_audio_hash_column(tmp_path: Path) -> None:
     bootstrap_database(database_path)
 
     with database(database_path) as connection:
-        columns = {
-            row["name"] for row in connection.execute("PRAGMA table_info(meetings)").fetchall()
-        }
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(meetings)").fetchall()}
 
     assert "audio_sha256" in columns
 
@@ -75,9 +70,7 @@ def test_bootstrap_database_migrates_existing_meetings_table(tmp_path: Path) -> 
     bootstrap_database(database_path)
 
     with database(database_path) as connection:
-        columns = {
-            row["name"] for row in connection.execute("PRAGMA table_info(meetings)").fetchall()
-        }
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(meetings)").fetchall()}
         index = connection.execute(
             """
             SELECT name FROM sqlite_master

@@ -79,9 +79,7 @@ class InteractiveMenu:
             if choice.shortcut is None or choice.shortcut in bound_shortcuts:
                 continue
             bound_shortcuts.add(choice.shortcut)
-            self.key_bindings.add(choice.shortcut)(
-                lambda _event, selected=choice: self._finish(selected)
-            )
+            self.key_bindings.add(choice.shortcut)(lambda _event, selected=choice: self._finish(selected))
 
     def _finish(self, choice: MenuChoice) -> None:
         if choice.playback_path is not None:

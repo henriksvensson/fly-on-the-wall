@@ -8,9 +8,7 @@ from fly_on_the_wall.costs import cost_summary, meeting_cost_summary
 from fly_on_the_wall.db import database
 
 console = Console()
-costs_app = typer.Typer(
-    help="Inspect external service usage and estimated costs.", no_args_is_help=True
-)
+costs_app = typer.Typer(help="Inspect external service usage and estimated costs.", no_args_is_help=True)
 
 
 @costs_app.command("summary")

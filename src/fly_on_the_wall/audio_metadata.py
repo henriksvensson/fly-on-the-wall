@@ -146,16 +146,10 @@ def _first_audio_stream(raw_metadata: dict) -> dict:
 def _normalized_tags(tags: object) -> dict[str, str]:
     if not isinstance(tags, dict):
         return {}
-    return {
-        str(key).lower(): str(value).strip()
-        for key, value in tags.items()
-        if str(value).strip()
-    }
+    return {str(key).lower(): str(value).strip() for key, value in tags.items() if str(value).strip()}
 
 
-def _recorded_at(
-    tags: dict[str, str], audio_path: Path
-) -> tuple[str | None, str | None, str | None]:
+def _recorded_at(tags: dict[str, str], audio_path: Path) -> tuple[str | None, str | None, str | None]:
     for key in ("date", "creation_time", "com.apple.quicktime.creationdate"):
         parsed = _parse_datetime(tags.get(key))
         if parsed is not None:

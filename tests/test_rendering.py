@@ -30,9 +30,7 @@ def test_render_diarized_transcript_uses_default_artifact_path(tmp_path: Path) -
 def test_render_named_transcript_uses_assignments(tmp_path: Path) -> None:
     with database(tmp_path / "fly.db") as connection:
         _insert_normalized_fixture(connection)
-        connection.execute(
-            "INSERT INTO people(id, display_name) VALUES (?, ?)", ("person-1", "Person B")
-        )
+        connection.execute("INSERT INTO people(id, display_name) VALUES (?, ?)", ("person-1", "Person B"))
         connection.execute(
             """
             INSERT INTO speaker_assignments(

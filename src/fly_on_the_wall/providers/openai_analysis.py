@@ -61,10 +61,7 @@ def suggest_meeting_title(request: TitleRequest) -> str:
     content = _post_chat_completion(
         ChatCompletionRequest(
             system_prompt=_title_system_prompt(request.meeting_context),
-            user_prompt=(
-                f"Transcript:\n{request.transcript_markdown}\n\n"
-                f"Analysis:\n{request.analysis_markdown}"
-            ),
+            user_prompt=(f"Transcript:\n{request.transcript_markdown}\n\n" f"Analysis:\n{request.analysis_markdown}"),
             options=request.options,
             timeout_seconds=60,
         )
@@ -101,9 +98,7 @@ def _close_client(client: httpx.Client, close_client: bool) -> None:
         client.close()
 
 
-def _send_chat_completion(
-    client: httpx.Client, api_key: str, request: ChatCompletionRequest
-) -> dict:
+def _send_chat_completion(client: httpx.Client, api_key: str, request: ChatCompletionRequest) -> dict:
     response = client.post(
         API_URL,
         headers={"Authorization": f"Bearer {api_key}"},
@@ -194,7 +189,7 @@ def _extract_content(response: dict) -> str:
 
 
 def _clean_title(value: str) -> str:
-    title = value.strip().strip('"\'`')
+    title = value.strip().strip("\"'`")
     if title.lower() in {"meeting summary", "team meeting", "meeting", "untitled"}:
         return ""
     return " ".join(title.split())

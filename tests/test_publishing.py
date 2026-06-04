@@ -20,9 +20,7 @@ def test_publish_target_crud(tmp_path: Path) -> None:
     target_path = tmp_path / "vault" / "Meetings"
 
     with database(tmp_path / "fly.db") as connection:
-        target = add_publish_target(
-            connection, "obsidian", target_path, "obsidian", auto_publish=True
-        )
+        target = add_publish_target(connection, "obsidian", target_path, "obsidian", auto_publish=True)
         targets = list_publish_targets(connection)
         removed = remove_publish_target(connection, "obsidian")
 
@@ -53,9 +51,7 @@ def test_publish_meeting_writes_and_updates_obsidian_note(tmp_path: Path) -> Non
         add_publish_target(connection, "obsidian", target_path, "obsidian")
 
         first = publish_meeting(connection, "intro", "obsidian")
-        connection.execute(
-            "UPDATE meetings SET title = ? WHERE id = ?", ("Renamed Call", "meeting-1")
-        )
+        connection.execute("UPDATE meetings SET title = ? WHERE id = ?", ("Renamed Call", "meeting-1"))
         export_markdown_transcript(
             connection,
             "meeting-1",
@@ -76,18 +72,14 @@ def test_publish_meeting_writes_and_updates_obsidian_note(tmp_path: Path) -> Non
     assert "managed by Fly on the Wall" in note
 
 
-def test_process_audio_auto_publishes_enabled_targets(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_process_audio_auto_publishes_enabled_targets(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("fly_on_the_wall.processing.get_api_key", lambda provider: None)
     audio_path = tmp_path / "meeting.m4a"
     audio_path.write_bytes(b"audio")
     storage = ensure_storage_layout(tmp_path / "storage")
     target_path = tmp_path / "vault" / "Meetings"
 
-    def fake_transcribe(
-        connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
-    ) -> str:
+    def fake_transcribe(connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths) -> str:
         raw_path = storage.artifacts / meeting_id / "raw.json"
         raw_path.parent.mkdir(parents=True, exist_ok=True)
         raw_path.write_text(
@@ -199,9 +191,7 @@ def test_publish_meeting_handles_legacy_manifest_without_analysis_path(tmp_path:
     export_dir.mkdir(parents=True)
     transcript_path = export_dir / "transcript.md"
     manifest_path = export_dir / "manifest.json"
-    transcript_path.write_text(
-        "# Intro Call\n\nDate: 2026-06-02\nTime: 10:09:00\n\n## Transcript\n\n**Person B:** Hej\n"
-    )
+    transcript_path.write_text("# Intro Call\n\nDate: 2026-06-02\nTime: 10:09:00\n\n## Transcript\n\n**Person B:** Hej\n")
     manifest_path.write_text(
         json.dumps(
             {

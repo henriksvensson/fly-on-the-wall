@@ -24,9 +24,7 @@ def test_export_markdown_transcript_writes_immutable_snapshot(tmp_path: Path) ->
             "# Meeting Analysis\n\n## Summary\n\nShort summary.",
             storage,
         )
-        second = export_markdown_transcript(
-            connection, "meeting-1", "Person B: Hej", "# Meeting Analysis", storage
-        )
+        second = export_markdown_transcript(connection, "meeting-1", "Person B: Hej", "# Meeting Analysis", storage)
         rows = connection.execute("SELECT * FROM exports ORDER BY created_at").fetchall()
 
     assert first.output_dir != second.output_dir
@@ -83,9 +81,7 @@ def test_export_markdown_transcript_prefers_recording_timestamp(tmp_path: Path) 
             ),
         )
 
-        result = export_markdown_transcript(
-            connection, "meeting-1", "Person B: Hej", "# Meeting Analysis", storage
-        )
+        result = export_markdown_transcript(connection, "meeting-1", "Person B: Hej", "# Meeting Analysis", storage)
 
     assert "Date: 2026-06-02" in result.transcript_path.read_text()
     assert "Time: 10:09:00" in result.transcript_path.read_text()

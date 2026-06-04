@@ -83,9 +83,7 @@ def test_scan_processes_stable_audio_file(tmp_path: Path) -> None:
             process_fn=fake_process,
             stable_age_seconds=0,
         )
-        item = connection.execute(
-            "SELECT * FROM watch_items WHERE path = ?", (str(audio_path),)
-        ).fetchone()
+        item = connection.execute("SELECT * FROM watch_items WHERE path = ?", (str(audio_path),)).fetchone()
 
     assert result.seen == 1
     assert result.processed == 1
@@ -114,9 +112,7 @@ def test_scan_skips_done_item_for_unchanged_file(tmp_path: Path) -> None:
     with database(tmp_path / "fly.db") as connection:
         add_watch_folder(connection, inbox)
         scan_watch_folders(connection, AppConfig(), process_fn=fake_process, stable_age_seconds=0)
-        result = scan_watch_folders(
-            connection, AppConfig(), process_fn=fake_process, stable_age_seconds=0
-        )
+        result = scan_watch_folders(connection, AppConfig(), process_fn=fake_process, stable_age_seconds=0)
 
     assert result.processed == 0
     assert result.skipped == 1
@@ -140,9 +136,7 @@ def test_scan_skips_recently_modified_audio_file(tmp_path: Path) -> None:
             process_fn=fake_process,
             stable_age_seconds=3600,
         )
-        item = connection.execute(
-            "SELECT * FROM watch_items WHERE path = ?", (str(audio_path),)
-        ).fetchone()
+        item = connection.execute("SELECT * FROM watch_items WHERE path = ?", (str(audio_path),)).fetchone()
 
     assert result.processed == 0
     assert result.skipped == 1
@@ -204,9 +198,7 @@ def test_scan_records_processing_failures(tmp_path: Path) -> None:
             process_fn=fake_process,
             stable_age_seconds=0,
         )
-        item = connection.execute(
-            "SELECT * FROM watch_items WHERE path = ?", (str(audio_path),)
-        ).fetchone()
+        item = connection.execute("SELECT * FROM watch_items WHERE path = ?", (str(audio_path),)).fetchone()
 
     assert result.failed == 1
     assert item["status"] == "failed"

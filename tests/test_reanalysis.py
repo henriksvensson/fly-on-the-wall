@@ -33,9 +33,7 @@ def test_list_stale_meetings_deduplicates_meetings(tmp_path) -> None:
     assert stale_meetings == [{"meeting_id": "meeting-1", "meeting_slug": "intro"}]
 
 
-def test_rerun_speaker_matching_defaults_to_unknown_speaker_meetings(
-    tmp_path, monkeypatch
-) -> None:
+def test_rerun_speaker_matching_defaults_to_unknown_speaker_meetings(tmp_path, monkeypatch) -> None:
     matched_provider_runs = []
 
     def fake_match(connection, provider_run_id, *args, **kwargs):
@@ -77,9 +75,7 @@ def test_rerun_speaker_matching_reports_progress(tmp_path, monkeypatch) -> None:
     ]
 
 
-def test_rerun_speaker_matching_marks_stale_only_when_assignments_change(
-    tmp_path, monkeypatch
-) -> None:
+def test_rerun_speaker_matching_marks_stale_only_when_assignments_change(tmp_path, monkeypatch) -> None:
     def fake_match(connection, provider_run_id, *args, **kwargs):
         connection.execute(
             """
@@ -103,9 +99,7 @@ def test_rerun_speaker_matching_marks_stale_only_when_assignments_change(
     assert {row["stage_name"] for row in stale} == set(results[0]["marked_stale"])
 
 
-def test_rerun_speaker_matching_can_include_known_speaker_meetings(
-    tmp_path, monkeypatch
-) -> None:
+def test_rerun_speaker_matching_can_include_known_speaker_meetings(tmp_path, monkeypatch) -> None:
     matched_provider_runs = []
 
     def fake_match(connection, provider_run_id, *args, **kwargs):
@@ -118,9 +112,7 @@ def test_rerun_speaker_matching_can_include_known_speaker_meetings(
         _insert_meeting_with_speaker(connection, "unknown-meeting", assignment_status=None)
         _insert_meeting_with_speaker(connection, "known-meeting", assignment_status="known")
 
-        results = rerun_speaker_matching_for_meetings(
-            connection, include_known_speakers=True
-        )
+        results = rerun_speaker_matching_for_meetings(connection, include_known_speakers=True)
 
     assert {result["meeting_slug"] for result in results} == {
         "unknown-meeting",

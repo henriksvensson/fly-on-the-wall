@@ -25,8 +25,7 @@ def render_diarized_transcript(
         (provider_run_id,),
     ).fetchall()
     transcript = "\n\n".join(
-        _format_turn(row["speaker_label"] or "Unknown", row["language"], row["text"])
-        for row in rows
+        _format_turn(row["speaker_label"] or "Unknown", row["language"], row["text"]) for row in rows
     )
 
     if output_path is None:

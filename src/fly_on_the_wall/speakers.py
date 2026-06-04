@@ -7,9 +7,7 @@ from uuid import uuid4
 from fly_on_the_wall.people import create_person, get_person
 
 
-def list_unknown_speakers(
-    connection: Connection, meeting_id_or_slug: str | None = None
-) -> list[dict]:
+def list_unknown_speakers(connection: Connection, meeting_id_or_slug: str | None = None) -> list[dict]:
     params: list[str] = []
     meeting_filter = ""
     if meeting_id_or_slug:
@@ -53,9 +51,7 @@ def speaker_examples(connection: Connection, local_speaker_id: str, limit: int =
     return [dict(row) for row in rows]
 
 
-def assign_speaker_to_person(
-    connection: Connection, local_speaker_id: str, person_id_or_name: str
-) -> dict:
+def assign_speaker_to_person(connection: Connection, local_speaker_id: str, person_id_or_name: str) -> dict:
     person = get_person(connection, person_id_or_name)
     if person is None:
         person = create_person(connection, person_id_or_name)
@@ -85,9 +81,7 @@ def assign_speaker_to_person(
                 json.dumps({"method": "user_correction"}),
             ),
         )
-        _record_correction(
-            connection, "speaker_assignment", meeting_id, local_speaker_id, person.id
-        )
+        _record_correction(connection, "speaker_assignment", meeting_id, local_speaker_id, person.id)
     return {
         "local_speaker_id": local_speaker_id,
         "person_id": person.id,
@@ -130,9 +124,7 @@ def _mark_speaker_status(connection: Connection, local_speaker_id: str, status: 
 
 
 def _local_speaker_meeting_id(connection: Connection, local_speaker_id: str) -> str | None:
-    row = connection.execute(
-        "SELECT meeting_id FROM local_speakers WHERE id = ?", (local_speaker_id,)
-    ).fetchone()
+    row = connection.execute("SELECT meeting_id FROM local_speakers WHERE id = ?", (local_speaker_id,)).fetchone()
     return None if row is None else row["meeting_id"]
 
 

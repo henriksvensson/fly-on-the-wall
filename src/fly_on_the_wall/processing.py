@@ -23,8 +23,8 @@ from fly_on_the_wall.meetings import (
 from fly_on_the_wall.normalization import normalize_provider_run
 from fly_on_the_wall.providers.elevenlabs import run_transcription
 from fly_on_the_wall.providers.openai_analysis import (
-    AnalysisRequest,
     DEFAULT_ANALYSIS_MODEL,
+    AnalysisRequest,
     OpenAIAnalysisError,
     OpenAIRequestOptions,
     TitleRequest,
@@ -71,7 +71,7 @@ class RefreshContext:
     paths: StoragePaths
     description: str | None
     embedding_backend: EmbeddingBackend | None
-    progress: "TimedProgress"
+    progress: TimedProgress
 
 
 @dataclass(frozen=True)
@@ -107,15 +107,11 @@ def process_audio(
     if existing_provider_run is None:
         with timed_progress.step("Transcribing audio with ElevenLabs"):
             resolved_transcribe = transcribe_fn or _run_elevenlabs_transcription
-            provider_run_id = resolved_transcribe(
-                connection, meeting.id, meeting.imported_audio_path, paths
-            )
+            provider_run_id = resolved_transcribe(connection, meeting.id, meeting.imported_audio_path, paths)
     else:
         timed_progress.message("Reusing completed ElevenLabs transcription")
         provider_run_id = existing_provider_run["id"]
-    context = RefreshContext(
-        connection, meeting, config, paths, description, embedding_backend, timed_progress
-    )
+    context = RefreshContext(connection, meeting, config, paths, description, embedding_backend, timed_progress)
     export = _refresh_provider_run(context, provider_run_id)
     timed_progress.message(f"Done ({timed_progress.total_elapsed()})")
     return ProcessResult(_meeting_from_database(connection, meeting.id), provider_run_id, export)
@@ -184,9 +180,7 @@ def _refresh_provider_run(context: RefreshContext, provider_run_id: str) -> Expo
         except RuntimeError as exc:
             context.progress.message(f"Speaker identity matching skipped ({exc})")
     with context.progress.step("Rendering named transcript"):
-        named_transcript = render_named_transcript(
-            context.connection, provider_run_id, storage=context.paths
-        )
+        named_transcript = render_named_transcript(context.connection, provider_run_id, storage=context.paths)
     with context.progress.step("Running deterministic cleanup"):
         deterministic_transcript = deterministic_cleanup(named_transcript)
     artifacts = _cleanup_transcript(context, deterministic_transcript)
@@ -240,15 +234,11 @@ def _cleanup_transcript(context: RefreshContext, deterministic_transcript: str) 
             write_cached_text(cleanup_cache_dir, cleanup_cache_key, cleaned_transcript)
             return TranscriptArtifacts(deterministic_transcript, cleaned_transcript)
         except OpenAICleanupError as exc:
-            context.progress.message(
-                f"OpenAI cleanup failed; exporting deterministic cleanup ({exc})"
-            )
+            context.progress.message(f"OpenAI cleanup failed; exporting deterministic cleanup ({exc})")
             return TranscriptArtifacts(deterministic_transcript, deterministic_transcript)
 
 
-def _publish_enabled_targets(
-    connection: Connection, meeting_id: str, progress: TimedProgress
-) -> None:
+def _publish_enabled_targets(connection: Connection, meeting_id: str, progress: TimedProgress) -> None:
     try:
         published = publish_enabled_targets(connection, meeting_id)
     except ValueError as exc:
@@ -273,9 +263,7 @@ def _suggest_and_apply_title(
     if meeting.get("title_source") == "manual":
         return
 
-    title_cache_key = text_sha256(
-        "\n".join([DEFAULT_ANALYSIS_MODEL, context.description or "", transcript, analysis])
-    )
+    title_cache_key = text_sha256("\n".join([DEFAULT_ANALYSIS_MODEL, context.description or "", transcript, analysis]))
     title_cache_dir = context.paths.artifacts / context.meeting.id / "generated-title"
     cached_title = read_cached_text(title_cache_dir, title_cache_key)
     if cached_title is not None:
@@ -407,9 +395,7 @@ def _analyze_transcript(
     if not get_api_key("openai"):
         return fallback_analysis("OPENAI_API_KEY is missing")
 
-    analysis_cache_key = text_sha256(
-        "\n".join([DEFAULT_ANALYSIS_MODEL, context.description or "", transcript])
-    )
+    analysis_cache_key = text_sha256("\n".join([DEFAULT_ANALYSIS_MODEL, context.description or "", transcript]))
     analysis_cache_dir = context.paths.artifacts / context.meeting.id / "analysis"
     cached_analysis = read_cached_text(analysis_cache_dir, analysis_cache_key)
     if cached_analysis is not None:

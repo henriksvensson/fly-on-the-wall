@@ -25,9 +25,7 @@ def test_process_audio_ignores_very_short_audio_before_transcription(
         lambda path: {"streams": [], "format": {"duration": "2.5", "size": "100"}},
     )
 
-    def fake_transcribe(
-        connection, meeting_id: str, audio_path: Path, storage: StoragePaths
-    ) -> str:
+    def fake_transcribe(connection, meeting_id: str, audio_path: Path, storage: StoragePaths) -> str:
         nonlocal transcribe_called
         transcribe_called = True
         return "run-1"
@@ -55,9 +53,7 @@ def test_process_audio_ignores_empty_transcript_after_transcription(tmp_path: Pa
     audio_path.write_bytes(b"audio")
     storage = ensure_storage_layout(tmp_path / "storage")
 
-    def fake_transcribe(
-        connection, meeting_id: str, audio_path: Path, storage: StoragePaths
-    ) -> str:
+    def fake_transcribe(connection, meeting_id: str, audio_path: Path, storage: StoragePaths) -> str:
         raw_path = storage.artifacts / meeting_id / "raw.json"
         raw_path.parent.mkdir(parents=True, exist_ok=True)
         raw_path.write_text('{"language_code":"sv","words":[]}')
@@ -86,9 +82,7 @@ def test_process_audio_ignores_empty_transcript_after_transcription(tmp_path: Pa
     assert export_count == 0
 
 
-def test_process_audio_records_sparse_transcript_as_suspicious(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_process_audio_records_sparse_transcript_as_suspicious(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     audio_path = tmp_path / "sparse.mp3"
     audio_path.write_bytes(b"audio")
     storage = ensure_storage_layout(tmp_path / "storage")
@@ -98,9 +92,7 @@ def test_process_audio_records_sparse_transcript_as_suspicious(
         lambda path: {"streams": [], "format": {"duration": "20", "size": "100"}},
     )
 
-    def fake_transcribe(
-        connection, meeting_id: str, audio_path: Path, storage: StoragePaths
-    ) -> str:
+    def fake_transcribe(connection, meeting_id: str, audio_path: Path, storage: StoragePaths) -> str:
         raw_path = storage.artifacts / meeting_id / "raw.json"
         raw_path.parent.mkdir(parents=True, exist_ok=True)
         raw_path.write_text(
@@ -155,12 +147,8 @@ def test_watch_scan_marks_ignored_recordings(tmp_path: Path) -> None:
 
     with database(tmp_path / "fly.db") as connection:
         add_watch_folder(connection, inbox)
-        result = scan_watch_folders(
-            connection, AppConfig(), process_fn=fake_process, stable_age_seconds=0
-        )
-        item = connection.execute(
-            "SELECT * FROM watch_items WHERE path = ?", (str(audio_path),)
-        ).fetchone()
+        result = scan_watch_folders(connection, AppConfig(), process_fn=fake_process, stable_age_seconds=0)
+        item = connection.execute("SELECT * FROM watch_items WHERE path = ?", (str(audio_path),)).fetchone()
 
     assert result.ignored == 1
     assert item["status"] == "ignored"

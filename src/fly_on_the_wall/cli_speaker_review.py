@@ -37,9 +37,7 @@ class SpeakerReviewResult:
 
 
 def speakers_review(
-    meeting: Annotated[
-        str | None, typer.Option("--meeting", "-m", help="Meeting ID or slug.")
-    ] = None,
+    meeting: Annotated[str | None, typer.Option("--meeting", "-m", help="Meeting ID or slug.")] = None,
 ) -> None:
     """Interactively review and assign unknown meeting speakers."""
     backend: EmbeddingBackend | None = None
@@ -61,9 +59,7 @@ def speakers_review(
         _refresh_reviewed_meetings(connection, changed_meetings, backend)
 
 
-def _review_one_speaker(
-    connection, speaker, backend: EmbeddingBackend | None
-) -> SpeakerReviewResult:
+def _review_one_speaker(connection, speaker, backend: EmbeddingBackend | None) -> SpeakerReviewResult:
     _print_speaker_review_prompt(connection, speaker)
     clip_path = _speaker_review_clip(connection, speaker["id"])
     while True:
@@ -129,18 +125,14 @@ def _apply_non_assignment_action(
     return SpeakerReviewResult(backend)
 
 
-def _assign_with_voice_sample(
-    connection, speaker, backend: EmbeddingBackend | None
-) -> SpeakerReviewResult:
+def _assign_with_voice_sample(connection, speaker, backend: EmbeddingBackend | None) -> SpeakerReviewResult:
     person = _select_person(connection)
     if person is None:
         console.print("Assignment cancelled.")
         return SpeakerReviewResult(backend)
     backend = backend or _try_embedding_backend()
     try:
-        result = create_voice_identity_from_speaker(
-            connection, speaker["id"], person.id, storage=None, backend=backend
-        )
+        result = create_voice_identity_from_speaker(connection, speaker["id"], person.id, storage=None, backend=backend)
     except ValueError as exc:
         console.print(str(exc))
         return SpeakerReviewResult(backend)
@@ -149,9 +141,7 @@ def _assign_with_voice_sample(
     return SpeakerReviewResult(backend, speaker["meeting_slug"])
 
 
-def _assign_without_voice_sample(
-    connection, speaker, backend: EmbeddingBackend | None
-) -> SpeakerReviewResult:
+def _assign_without_voice_sample(connection, speaker, backend: EmbeddingBackend | None) -> SpeakerReviewResult:
     person = _select_person(connection)
     if person is None:
         console.print("Assignment cancelled.")
@@ -161,9 +151,7 @@ def _assign_without_voice_sample(
     return SpeakerReviewResult(backend, speaker["meeting_slug"])
 
 
-def _create_person_with_voice_sample(
-    connection, speaker, backend: EmbeddingBackend | None
-) -> SpeakerReviewResult:
+def _create_person_with_voice_sample(connection, speaker, backend: EmbeddingBackend | None) -> SpeakerReviewResult:
     name = typer.prompt("New known person name")
     backend = backend or _try_embedding_backend()
     try:
@@ -183,9 +171,7 @@ def _create_person_with_voice_sample(
     return SpeakerReviewResult(backend, speaker["meeting_slug"])
 
 
-def _create_person_without_voice_sample(
-    connection, speaker, backend: EmbeddingBackend | None
-) -> SpeakerReviewResult:
+def _create_person_without_voice_sample(connection, speaker, backend: EmbeddingBackend | None) -> SpeakerReviewResult:
     name = typer.prompt("New known person name")
     assignment = assign_speaker_to_person(connection, speaker["id"], name)
     console.print(f"Created known person {assignment['name']}")
@@ -193,9 +179,7 @@ def _create_person_without_voice_sample(
     return SpeakerReviewResult(backend, speaker["meeting_slug"])
 
 
-def _refresh_reviewed_meetings(
-    connection, changed_meetings: set[str], backend: EmbeddingBackend | None
-) -> None:
+def _refresh_reviewed_meetings(connection, changed_meetings: set[str], backend: EmbeddingBackend | None) -> None:
     if not changed_meetings:
         return
     refresh_meetings = _speaker_review_follow_up(connection, changed_meetings)

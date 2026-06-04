@@ -30,9 +30,7 @@ def test_cache_voice_sample_embedding_updates_sample(tmp_path: Path) -> None:
         person = create_person(connection, "Person B")
         sample = create_voice_sample_from_clip(connection, person.id, clip_path, storage)
         cached = cache_voice_sample_embedding(connection, sample.id, FakeBackend(), storage)
-        row = connection.execute(
-            "SELECT * FROM voice_samples WHERE id = ?", (sample.id,)
-        ).fetchone()
+        row = connection.execute("SELECT * FROM voice_samples WHERE id = ?", (sample.id,)).fetchone()
 
     assert cached.vector == [1.0, 0.0, 0.0]
     assert read_embedding(cached.path) == [1.0, 0.0, 0.0]
@@ -64,12 +62,8 @@ def test_cache_local_speaker_embedding_upserts_embedding(tmp_path: Path) -> None
             """,
             ("local-1", "meeting-1", "run-1", "speaker_0"),
         )
-        cached = cache_local_speaker_embedding(
-            connection, "local-1", audio_path, FakeBackend(), storage
-        )
-        cached_again = cache_local_speaker_embedding(
-            connection, "local-1", audio_path, FakeBackend(), storage
-        )
+        cached = cache_local_speaker_embedding(connection, "local-1", audio_path, FakeBackend(), storage)
+        cached_again = cache_local_speaker_embedding(connection, "local-1", audio_path, FakeBackend(), storage)
         rows = connection.execute("SELECT * FROM local_speaker_embeddings").fetchall()
 
     assert len(rows) == 1

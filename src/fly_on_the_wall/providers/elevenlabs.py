@@ -79,9 +79,7 @@ def run_transcription(
 ) -> str:
     paths = storage or storage_paths()
     provider_run_id = str(uuid4())
-    raw_response_path = (
-        paths.artifacts / meeting_id / "provider-runs" / f"{provider_run_id}.raw.json"
-    )
+    raw_response_path = paths.artifacts / meeting_id / "provider-runs" / f"{provider_run_id}.raw.json"
     raw_response_path.parent.mkdir(parents=True, exist_ok=True)
 
     _insert_provider_run(connection, provider_run_id, meeting_id, raw_response_path, "running")

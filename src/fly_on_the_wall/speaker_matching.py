@@ -75,9 +75,7 @@ def match_local_speaker(
     return SpeakerMatch(local_speaker_id, person_id, status, best["score"], margin)
 
 
-def _score_people(
-    connection: Connection, local_vector: list[float]
-) -> list[dict[str, float | str]]:
+def _score_people(connection: Connection, local_vector: list[float]) -> list[dict[str, float | str]]:
     rows = connection.execute(
         """
         SELECT person_id, id AS voice_sample_id, embedding_path

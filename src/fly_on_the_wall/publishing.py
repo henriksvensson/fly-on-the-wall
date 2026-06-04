@@ -58,9 +58,7 @@ def add_publish_target(
                 1 if enabled else 0,
             ),
         )
-    return PublishTarget(
-        target_id, name, target_type, resolved_path, auto_publish, enabled, settings or {}
-    )
+    return PublishTarget(target_id, name, target_type, resolved_path, auto_publish, enabled, settings or {})
 
 
 def list_publish_targets(connection: Connection) -> list[PublishTarget]:
@@ -95,9 +93,7 @@ def remove_publish_target(connection: Connection, identifier: str) -> PublishTar
     return target
 
 
-def set_publish_target_enabled(
-    connection: Connection, identifier: str, enabled: bool
-) -> PublishTarget | None:
+def set_publish_target_enabled(connection: Connection, identifier: str, enabled: bool) -> PublishTarget | None:
     target = get_publish_target(connection, identifier)
     if target is None:
         return None
@@ -121,9 +117,7 @@ def set_publish_target_enabled(
     )
 
 
-def publish_meeting(
-    connection: Connection, meeting_id_or_slug: str, target_identifier: str
-) -> PublishResult:
+def publish_meeting(connection: Connection, meeting_id_or_slug: str, target_identifier: str) -> PublishResult:
     target = get_publish_target(connection, target_identifier)
     if target is None:
         raise ValueError(f"Publish target not found: {target_identifier}")
@@ -169,9 +163,7 @@ def publish_enabled_targets(connection: Connection, meeting_id: str) -> list[Pub
     return results
 
 
-def _publishable_meeting_ids(
-    connection: Connection, target_id: str, only_unpublished: bool
-) -> list[str]:
+def _publishable_meeting_ids(connection: Connection, target_id: str, only_unpublished: bool) -> list[str]:
     rows = connection.execute(
         """
         SELECT meetings.id
@@ -244,12 +236,8 @@ def _latest_export(connection: Connection, meeting_id: str) -> dict:
 def _export_paths(export: dict) -> tuple[Path, Path | None, Path]:
     manifest_path = Path(export["manifest_path"])
     manifest = json.loads(manifest_path.read_text())
-    transcript_path = Path(
-        manifest.get("transcript_path") or manifest_path.parent / "transcript.md"
-    )
-    analysis_path = _optional_manifest_path(
-        manifest, "analysis_path", manifest_path.parent / "analysis.md"
-    )
+    transcript_path = Path(manifest.get("transcript_path") or manifest_path.parent / "transcript.md")
+    analysis_path = _optional_manifest_path(manifest, "analysis_path", manifest_path.parent / "analysis.md")
     return transcript_path, analysis_path, manifest_path
 
 
@@ -283,9 +271,7 @@ def _published_output_path(connection: Connection, meeting: dict, target: Publis
     return target.path / filename
 
 
-def _obsidian_note(
-    meeting: dict, transcript_markdown: str, analysis_markdown: str, manifest: dict
-) -> str:
+def _obsidian_note(meeting: dict, transcript_markdown: str, analysis_markdown: str, manifest: dict) -> str:
     date, time = _date_time(_meeting_timestamp(meeting))
     frontmatter = {
         "title": meeting["title"],
@@ -301,9 +287,7 @@ def _obsidian_note(
         "tags": ["meetings", "fly-on-the-wall"],
     }
     lines = ["---", *_yaml_lines(frontmatter), "---", ""]
-    lines.append(
-        "<!-- This note is managed by Fly on the Wall. Republishing may overwrite changes. -->"
-    )
+    lines.append("<!-- This note is managed by Fly on the Wall. Republishing may overwrite changes. -->")
     lines.append("")
     lines.append(f"# {meeting['title']}")
     lines.append("")
@@ -317,8 +301,7 @@ def _obsidian_note(
         lines.append(f"Device/Software: {meeting['device_or_software']}")
     if meeting.get("recording_quality_status"):
         lines.append(
-            "Recording Quality: "
-            f"{meeting['recording_quality_status']} ({meeting['recording_quality_reason']})"
+            "Recording Quality: " f"{meeting['recording_quality_status']} ({meeting['recording_quality_reason']})"
         )
     lines.append(f"Internal Export: {manifest.get('id', 'unknown')}")
     lines.append("")

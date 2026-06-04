@@ -46,9 +46,7 @@ def test_import_meeting_copies_audio_and_creates_record(tmp_path: Path, monkeypa
             description="First call",
         )
         row = connection.execute("SELECT * FROM meetings WHERE id = ?", (meeting.id,)).fetchone()
-        metadata = connection.execute(
-            "SELECT * FROM audio_metadata WHERE meeting_id = ?", (meeting.id,)
-        ).fetchone()
+        metadata = connection.execute("SELECT * FROM audio_metadata WHERE meeting_id = ?", (meeting.id,)).fetchone()
 
     assert meeting.slug == "intro-call-with-person_b"
     assert meeting.imported_audio_path.read_bytes() == b"fake audio"
@@ -86,17 +84,11 @@ def test_generated_title_replaces_filename_title_only(tmp_path: Path) -> None:
 
     with database(tmp_path / "fly.db") as connection:
         filename_meeting = import_meeting(connection, filename_audio, None, AppConfig(), storage)
-        manual_meeting = import_meeting(
-            connection, manual_audio, "Manual Title", AppConfig(), storage
-        )
+        manual_meeting = import_meeting(connection, manual_audio, "Manual Title", AppConfig(), storage)
         update_generated_title(connection, filename_meeting.id, "Recruitment Planning")
         update_generated_title(connection, manual_meeting.id, "Generated Suggestion")
-        filename_row = connection.execute(
-            "SELECT * FROM meetings WHERE id = ?", (filename_meeting.id,)
-        ).fetchone()
-        manual_row = connection.execute(
-            "SELECT * FROM meetings WHERE id = ?", (manual_meeting.id,)
-        ).fetchone()
+        filename_row = connection.execute("SELECT * FROM meetings WHERE id = ?", (filename_meeting.id,)).fetchone()
+        manual_row = connection.execute("SELECT * FROM meetings WHERE id = ?", (manual_meeting.id,)).fetchone()
 
     assert filename_row["title"] == "Recruitment Planning"
     assert filename_row["title_source"] == "generated"
@@ -145,9 +137,7 @@ def test_import_meeting_reuses_existing_meeting_for_same_audio_hash(tmp_path: Pa
     with database(tmp_path / "fly.db") as connection:
         first = import_meeting(connection, first_audio_path, "First Title", AppConfig(), storage)
         second = import_meeting(connection, second_audio_path, "Second Title", AppConfig(), storage)
-        meeting_count = connection.execute(
-            "SELECT COUNT(*) AS count FROM meetings"
-        ).fetchone()["count"]
+        meeting_count = connection.execute("SELECT COUNT(*) AS count FROM meetings").fetchone()["count"]
 
     assert first.id == second.id
     assert second.title == "First Title"
@@ -209,9 +199,7 @@ def test_delete_meeting_removes_database_rows_and_owned_files(tmp_path: Path) ->
             """,
             ("meeting-1", "intro", "Intro", "sv", str(imported_audio_path)),
         )
-        connection.execute(
-            "INSERT INTO people(id, display_name) VALUES (?, ?)", ("person-1", "Person B")
-        )
+        connection.execute("INSERT INTO people(id, display_name) VALUES (?, ?)", ("person-1", "Person B"))
         connection.execute(
             """
             INSERT INTO provider_runs(id, meeting_id, provider, model, raw_response_path, status)
