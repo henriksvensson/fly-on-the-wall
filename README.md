@@ -283,16 +283,35 @@ Raw provider responses are intentionally preserved. They are useful for debuggin
 
 ## Development
 
+Install development dependencies:
+
+```bash
+uv sync --dev
+```
+
+Install pre-commit hooks:
+
+```bash
+uv run pre-commit install
+```
+
+Run all pre-commit hooks manually:
+
+```bash
+uv run pre-commit run --all-files
+```
+
 Run tests:
 
 ```bash
 uv run pytest
 ```
 
-Run lint:
+Run lint and formatting checks:
 
 ```bash
 uv run ruff check .
+uv run ruff format --check .
 ```
 
 Architecture notes live in:

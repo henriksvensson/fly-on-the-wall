@@ -23,6 +23,7 @@ fot = "fly_on_the_wall.cli:app"
 
 [dependency-groups]
 dev = [
+    "pre-commit>=4.0.0",
     "pytest>=8.0.0",
     "ruff>=0.8.0",
 ]
@@ -32,7 +33,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py312"
 src = ["src", "tests"]
 exclude = ["poc"]
