@@ -53,6 +53,15 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/fly_on_the_wall"]
 
+[tool.hatch.build.targets.sdist]
+ignore-vcs = true
+only-include = [
+    "src/fly_on_the_wall",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+]
+
 [tool.ruff]
 line-length = 120
 target-version = "py312"
