@@ -6,6 +6,10 @@ It takes local audio recordings, transcribes them, identifies recurring speakers
 
 The tool is designed for one person running it locally. There is no hosted service, login system, team workspace, or multi-tenant data model.
 
+## Project Status
+
+This is early alpha software. It is usable as a local personal CLI, but command behavior, storage schema, and output formats may still change between releases.
+
 ## What It Does
 
 `fot process <audio>` runs the main pipeline:
@@ -179,6 +183,8 @@ Review unknown meeting speakers interactively:
 
 ```bash
 fot meetings speakers review
+fot meetings speakers review --include-uncertain
+fot meetings speakers review --only-uncertain
 ```
 
 Review speakers for one meeting:
@@ -314,6 +320,22 @@ The app stores operational state in SQLite and large artifacts on disk:
 
 Raw provider responses are intentionally preserved. They are useful for debugging, normalization changes, speaker review, cost tracking, and future reprocessing.
 
+## Uninstalling
+
+Remove the installed CLI:
+
+```bash
+uv tool uninstall fly-on-the-wall
+```
+
+Remove local configuration and app data if you no longer need stored meetings, exports, raw provider responses, voice samples, or settings:
+
+```bash
+rm -rf ~/.config/fly-on-the-wall ~/.local/share/fly-on-the-wall
+```
+
+This does not remove original recordings that were processed from outside the app storage directory.
+
 ## Development
 
 Install development dependencies:
@@ -365,33 +387,3 @@ Publish to PyPI after verifying the build, package name, and license metadata:
 ```bash
 uv publish
 ```
-
-Architecture notes live in:
-
-```text
-ARCHITECTURE_DECISIONS.md
-```
-
-Implementation tasks live in:
-
-```text
-IMPLEMENTATION_TASKS.md
-```
-
-Detailed proof-of-concept results live in:
-
-```text
-PROOF_OF_CONCEPT_RESULTS.md
-```
-
-## Proof-Of-Concept Results
-
-Detailed anonymized proof-of-concept notes live in [`PROOF_OF_CONCEPT_RESULTS.md`](PROOF_OF_CONCEPT_RESULTS.md).
-
-The main choices that came out of the proof of concept were:
-
-- ElevenLabs Scribe v2 is the current default transcription provider because it gave the best overall balance of readable Swedish transcription and useful diarization.
-- Speechmatics was useful as a diarization comparison point, especially when sensitivity tuning over-split speakers that ElevenLabs merged.
-- Local speaker embeddings were promising enough to support recurring-speaker identity matching across recordings.
-- Human-confirmed voice samples materially improved speaker matching quality.
-- Transcription, diarization, speaker identity, and transcript readability should remain separate pipeline stages so each can be inspected and improved independently.
