@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -105,6 +107,7 @@ class InteractiveMenu:
             self.application.invalidate()
             return
         self.status_message = "Playing. Press Enter to stop."
+        self._watch_playback_completion(self.playback_process)
         self.application.invalidate()
 
     def _stop_playback(self) -> None:
@@ -119,9 +122,7 @@ class InteractiveMenu:
         self.application.invalidate()
 
     def _render_menu(self):
-        if self.playback_process is not None and self.playback_process.poll() is not None:
-            self.playback_process = None
-            self.status_message = ""
+        self._clear_finished_playback()
         lines = [("class:title", f"{self.title}\n")]
         lines.extend(self._choice_lines())
         if self.status_message:
@@ -140,3 +141,23 @@ class InteractiveMenu:
 
     def _playback_is_running(self) -> bool:
         return self.playback_process is not None and self.playback_process.poll() is None
+
+    def _watch_playback_completion(self, process: subprocess.Popen) -> None:
+        thread = threading.Thread(target=self._wait_for_playback_completion, args=(process,), daemon=True)
+        thread.start()
+
+    def _wait_for_playback_completion(self, process: subprocess.Popen) -> None:
+        process.wait()
+        if self._clear_finished_playback(process):
+            self.application.invalidate()
+
+    def _clear_finished_playback(self, process: subprocess.Popen | None = None) -> bool:
+        if self.playback_process is None:
+            return False
+        if process is not None and self.playback_process is not process:
+            return False
+        if self.playback_process.poll() is None:
+            return False
+        self.playback_process = None
+        self.status_message = ""
+        return True
