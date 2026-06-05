@@ -163,7 +163,9 @@ def test_meetings_speakers_review_command_exists() -> None:
     result = runner.invoke(app, ["meetings", "speakers", "review", "--help"])
 
     assert result.exit_code == 0
-    assert "unknown meeting speakers" in result.stdout
+    assert "unknown or uncertain meeting speakers" in result.stdout
+    assert "include-uncertain" in result.stdout
+    assert "only-uncertain" in result.stdout
 
 
 def test_meetings_speakers_ignore_command_exists() -> None:
@@ -213,11 +215,19 @@ def test_speakers_review_quit_still_prompts_for_refresh(monkeypatch) -> None:
     actions = iter(["i", "q"])
 
     monkeypatch.setattr(cli_speaker_review, "database", fake_database)
-    monkeypatch.setattr(cli_speaker_review, "list_unknown_speakers", lambda connection, meeting=None: speakers)
+    monkeypatch.setattr(
+        cli_speaker_review,
+        "list_review_speakers",
+        lambda connection, meeting=None, include_uncertain=False, only_uncertain=False: speakers,
+    )
     monkeypatch.setattr(cli_speaker_review, "speaker_examples", lambda connection, speaker_id, limit=1: [])
     monkeypatch.setattr(cli_speaker_review, "prepare_speaker_review_clip", lambda connection, speaker_id: None)
     monkeypatch.setattr(cli_speaker_review, "mark_speaker_ignored", lambda connection, speaker_id: None)
-    monkeypatch.setattr(cli_speaker_review, "_select_speaker_review_action", lambda clip_available: next(actions))
+    monkeypatch.setattr(
+        cli_speaker_review,
+        "_select_speaker_review_action",
+        lambda clip_available, can_confirm=False: next(actions),
+    )
     monkeypatch.setattr(cli_speaker_review, "_select_speaker_review_follow_up_action", lambda: "n")
 
     result = runner.invoke(app, ["meetings", "speakers", "review"])
@@ -236,10 +246,14 @@ def test_speakers_review_can_create_new_person_without_voice_sample(monkeypatch)
     speakers = [{"id": "speaker-1", "meeting_slug": "intro", "label": "speaker_0"}]
 
     monkeypatch.setattr(cli_speaker_review, "database", fake_database)
-    monkeypatch.setattr(cli_speaker_review, "list_unknown_speakers", lambda connection, meeting=None: speakers)
+    monkeypatch.setattr(
+        cli_speaker_review,
+        "list_review_speakers",
+        lambda connection, meeting=None, include_uncertain=False, only_uncertain=False: speakers,
+    )
     monkeypatch.setattr(cli_speaker_review, "speaker_examples", lambda connection, speaker_id, limit=1: [])
     monkeypatch.setattr(cli_speaker_review, "prepare_speaker_review_clip", lambda connection, speaker_id: None)
-    monkeypatch.setattr(cli_speaker_review, "_select_speaker_review_action", lambda clip_path: "o")
+    monkeypatch.setattr(cli_speaker_review, "_select_speaker_review_action", lambda clip_path, can_confirm=False: "o")
     monkeypatch.setattr(cli_speaker_review.typer, "prompt", lambda *args, **kwargs: "Person B")
     monkeypatch.setattr(
         cli_speaker_review,
@@ -253,6 +267,53 @@ def test_speakers_review_can_create_new_person_without_voice_sample(monkeypatch)
     assert result.exit_code == 0
     assert "Created known person Person B" in result.stdout
     assert "without voice sample" in result.stdout
+
+
+def test_speakers_review_can_confirm_uncertain_suggestion(monkeypatch) -> None:
+    @contextmanager
+    def fake_database():
+        yield object()
+
+    speakers = [
+        {
+            "id": "speaker-1",
+            "meeting_slug": "intro",
+            "label": "speaker_0",
+            "review_kind": "uncertain",
+            "suggested_person_id": "person-1",
+            "suggested_person_name": "Person B",
+            "confidence": 0.73,
+            "margin": 0.11,
+        }
+    ]
+
+    monkeypatch.setattr(cli_speaker_review, "database", fake_database)
+    monkeypatch.setattr(
+        cli_speaker_review,
+        "list_review_speakers",
+        lambda connection, meeting=None, include_uncertain=False, only_uncertain=False: speakers,
+    )
+    monkeypatch.setattr(cli_speaker_review, "speaker_examples", lambda connection, speaker_id, limit=1: [])
+    monkeypatch.setattr(cli_speaker_review, "prepare_speaker_review_clip", lambda connection, speaker_id: None)
+    monkeypatch.setattr(cli_speaker_review, "_select_speaker_review_action", lambda clip_path, can_confirm=False: "v")
+    monkeypatch.setattr(cli_speaker_review, "_try_embedding_backend", lambda: None)
+    monkeypatch.setattr(
+        cli_speaker_review,
+        "create_voice_identity_from_speaker",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("no timestamped audio")),
+    )
+    monkeypatch.setattr(
+        cli_speaker_review,
+        "confirm_speaker_assignment",
+        lambda connection, speaker_id: {"name": "Person B"},
+    )
+    monkeypatch.setattr(cli_speaker_review, "_speaker_review_follow_up", lambda connection, changed: set())
+
+    result = runner.invoke(app, ["meetings", "speakers", "review", "--only-uncertain"])
+
+    assert result.exit_code == 0
+    assert "Suggested person: Person B" in result.stdout
+    assert "Confirmed meeting speaker as Person B" in result.stdout
 
 
 def test_speaker_review_follow_up_can_reanalyze_unknown_speakers(monkeypatch) -> None:

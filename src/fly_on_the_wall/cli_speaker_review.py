@@ -21,7 +21,8 @@ from fly_on_the_wall.speaker_identity import (
 )
 from fly_on_the_wall.speakers import (
     assign_speaker_to_person,
-    list_unknown_speakers,
+    confirm_speaker_assignment,
+    list_review_speakers,
     mark_speaker_ignored,
     speaker_examples,
 )
@@ -38,14 +39,22 @@ class SpeakerReviewResult:
 
 def speakers_review(
     meeting: Annotated[str | None, typer.Option("--meeting", "-m", help="Meeting ID or slug.")] = None,
+    include_uncertain: Annotated[
+        bool,
+        typer.Option("--include-uncertain", help="Also review uncertain speaker matches."),
+    ] = False,
+    only_uncertain: Annotated[
+        bool,
+        typer.Option("--only-uncertain", help="Review only uncertain speaker matches."),
+    ] = False,
 ) -> None:
-    """Interactively review and assign unknown meeting speakers."""
+    """Interactively review and assign unknown or uncertain meeting speakers."""
     backend: EmbeddingBackend | None = None
     changed_meetings: set[str] = set()
     with database() as connection:
-        speakers = list_unknown_speakers(connection, meeting)
+        speakers = list_review_speakers(connection, meeting, include_uncertain, only_uncertain)
         if not speakers:
-            console.print("No unknown speakers found.")
+            console.print("No speakers found for review.")
             return
 
         for speaker in speakers:
@@ -63,7 +72,7 @@ def _review_one_speaker(connection, speaker, backend: EmbeddingBackend | None) -
     _print_speaker_review_prompt(connection, speaker)
     clip_path = _speaker_review_clip(connection, speaker["id"])
     while True:
-        action = _select_speaker_review_action(clip_path)
+        action = _select_speaker_review_action(clip_path, speaker.get("review_kind") == "uncertain")
         result = _apply_speaker_review_action(connection, speaker, action, backend)
         backend = result.backend
         if _speaker_review_action_finished(action, result):
@@ -78,6 +87,12 @@ def _print_speaker_review_prompt(connection, speaker) -> None:
     console.print(f"Meeting speaker: {speaker['id']}")
     console.print(f"Meeting: {speaker['meeting_slug']}")
     console.print(f"Provider label: {speaker['label']}")
+    if speaker.get("review_kind") == "uncertain":
+        console.print(f"Suggested person: {speaker['suggested_person_name']}")
+        if speaker.get("confidence") is not None:
+            console.print(f"Confidence: {speaker['confidence']:.3f}")
+        if speaker.get("margin") is not None:
+            console.print(f"Margin: {speaker['margin']:.3f}")
     examples = speaker_examples(connection, speaker["id"], limit=1)
     if examples:
         console.print(f"Example: {examples[0]['text']}")
@@ -105,6 +120,8 @@ def _apply_speaker_review_action(
         return _create_person_with_voice_sample(connection, speaker, backend)
     if action == "o":
         return _create_person_without_voice_sample(connection, speaker, backend)
+    if action == "v":
+        return _confirm_suggested_assignment(connection, speaker, backend)
     return _apply_non_assignment_action(connection, speaker, action, backend)
 
 
@@ -179,6 +196,27 @@ def _create_person_without_voice_sample(connection, speaker, backend: EmbeddingB
     return SpeakerReviewResult(backend, speaker["meeting_slug"])
 
 
+def _confirm_suggested_assignment(connection, speaker, backend: EmbeddingBackend | None) -> SpeakerReviewResult:
+    suggested_person_id = speaker.get("suggested_person_id")
+    suggested_person_name = speaker.get("suggested_person_name")
+    if not suggested_person_id:
+        console.print("No suggested person available for this speaker.")
+        return SpeakerReviewResult(backend)
+
+    backend = backend or _try_embedding_backend()
+    try:
+        result = create_voice_identity_from_speaker(connection, speaker["id"], suggested_person_id, backend=backend)
+    except ValueError as exc:
+        console.print(f"Could not create voice sample ({exc}); confirming assignment only.")
+        assignment = confirm_speaker_assignment(connection, speaker["id"])
+        console.print(f"Confirmed meeting speaker as {assignment['name']}.")
+        return SpeakerReviewResult(backend, speaker["meeting_slug"])
+
+    console.print(f"Confirmed meeting speaker as {suggested_person_name or result.person_name}.")
+    console.print(f"Voice sample: {result.voice_sample.audio_path}")
+    return SpeakerReviewResult(backend, speaker["meeting_slug"])
+
+
 def _refresh_reviewed_meetings(connection, changed_meetings: set[str], backend: EmbeddingBackend | None) -> None:
     if not changed_meetings:
         return
@@ -248,10 +286,12 @@ def _select_person(connection) -> Person | None:
     return next(person for person in people if person.id == selected_person_id)
 
 
-def _select_speaker_review_action(clip_path: Path | None) -> str:
+def _select_speaker_review_action(clip_path: Path | None, can_confirm: bool = False) -> str:
     choices = []
     if clip_path is not None:
         choices.append(MenuChoice("p", "Play clip", None, playback_path=clip_path))
+    if can_confirm:
+        choices.append(MenuChoice("v", "Confirm suggested person", "v"))
     choices.extend(
         [
             MenuChoice("a", "Assign with voice sample", "a"),
