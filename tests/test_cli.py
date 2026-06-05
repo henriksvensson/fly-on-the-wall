@@ -138,6 +138,61 @@ def test_meetings_remove_command_exists() -> None:
     assert "Completely remove a meeting" in result.stdout
 
 
+def test_meetings_remove_asks_about_published_notes(monkeypatch) -> None:
+    @contextmanager
+    def fake_database():
+        yield object()
+
+    captured = {}
+
+    def fake_delete_meeting(connection, meeting, delete_published=False):
+        captured["delete_published"] = delete_published
+        return type("Result", (), {"slug": "intro", "removed_paths": ()})()
+
+    monkeypatch.setattr("fly_on_the_wall.cli.database", fake_database)
+    monkeypatch.setattr(
+        "fly_on_the_wall.cli.get_meeting",
+        lambda connection, meeting: {"id": "meeting-1", "slug": "intro"},
+    )
+    monkeypatch.setattr("fly_on_the_wall.cli._meeting_has_published_items", lambda connection, meeting_id: True)
+    monkeypatch.setattr("fly_on_the_wall.cli.delete_meeting", fake_delete_meeting)
+
+    result = runner.invoke(app, ["meetings", "remove", "intro"], input="y\ny\n")
+
+    assert result.exit_code == 0
+    assert "Delete externally published notes" in result.stdout
+    assert captured["delete_published"] is True
+
+
+def test_meetings_remove_yes_does_not_prompt_about_published_notes(monkeypatch) -> None:
+    @contextmanager
+    def fake_database():
+        yield object()
+
+    captured = {}
+
+    def fake_delete_meeting(connection, meeting, delete_published=False):
+        captured["delete_published"] = delete_published
+        return type("Result", (), {"slug": "intro", "removed_paths": ()})()
+
+    monkeypatch.setattr("fly_on_the_wall.cli.database", fake_database)
+    monkeypatch.setattr(
+        "fly_on_the_wall.cli.get_meeting",
+        lambda connection, meeting: {"id": "meeting-1", "slug": "intro"},
+    )
+    monkeypatch.setattr(
+        "fly_on_the_wall.cli._meeting_has_published_items",
+        lambda connection, meeting_id: (_ for _ in ()).throw(AssertionError("should not check published items")),
+    )
+    monkeypatch.setattr("fly_on_the_wall.cli.delete_meeting", fake_delete_meeting)
+
+    result = runner.invoke(app, ["meetings", "remove", "intro", "--yes"])
+
+    assert result.exit_code == 0
+    assert "Delete externally published notes" not in result.stdout
+    assert captured["delete_published"] is False
+
+
 def test_meetings_rename_command_exists() -> None:
     result = runner.invoke(app, ["meetings", "rename", "--help"])
 

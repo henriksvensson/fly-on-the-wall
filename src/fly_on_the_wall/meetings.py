@@ -256,6 +256,7 @@ def delete_meeting(
     connection: Connection,
     meeting_id_or_slug: str,
     storage: StoragePaths | None = None,
+    delete_published: bool = False,
 ) -> DeleteMeetingResult:
     meeting = get_meeting(connection, meeting_id_or_slug)
     if meeting is None:
@@ -263,6 +264,8 @@ def delete_meeting(
 
     paths = storage or ensure_storage_layout()
     removed_paths = _meeting_owned_paths(connection, meeting, paths)
+    if delete_published:
+        removed_paths.extend(_published_paths(connection, meeting["id"]))
     local_speaker_ids = _local_speaker_ids(connection, meeting["id"])
     voice_sample_ids = _meeting_voice_sample_ids(connection, meeting["id"])
 
@@ -311,6 +314,16 @@ def _meeting_owned_paths(connection: Connection, meeting: dict, storage: Storage
             paths.append(Path(row["embedding_path"]))
 
     return _deduplicate_paths(paths)
+
+
+def _published_paths(connection: Connection, meeting_id: str) -> list[Path]:
+    return [
+        Path(row["output_path"])
+        for row in connection.execute(
+            "SELECT output_path FROM published_items WHERE meeting_id = ?",
+            (meeting_id,),
+        ).fetchall()
+    ]
 
 
 def _local_speaker_ids(connection: Connection, meeting_id: str) -> list[str]:

@@ -211,6 +211,10 @@ def meetings_rename(meeting: str, title: str) -> None:
 def meetings_remove(
     meeting: str,
     yes: Annotated[bool, typer.Option("--yes", "-y", help="Delete without interactive confirmation.")] = False,
+    delete_published: Annotated[
+        bool,
+        typer.Option("--delete-published", help="Also delete externally published notes for this meeting."),
+    ] = False,
 ) -> None:
     """Completely remove a meeting and its stored files."""
     with database() as connection:
@@ -220,15 +224,30 @@ def meetings_remove(
             raise typer.Exit(code=1)
 
         if not yes:
-            confirmed = typer.confirm(f"Delete meeting {found['slug']} and all stored data?", default=False)
+            message = f"Delete meeting {found['slug']} and all stored data?"
+            if delete_published:
+                message += " This will also delete externally published notes."
+            confirmed = typer.confirm(message, default=False)
             if not confirmed:
                 console.print("Cancelled.")
                 return
+            if not delete_published and _meeting_has_published_items(connection, found["id"]):
+                delete_published = typer.confirm(
+                    "Delete externally published notes for this meeting too?",
+                    default=False,
+                )
 
-        result = delete_meeting(connection, meeting)
+        result = delete_meeting(connection, meeting, delete_published=delete_published)
 
     console.print(f"Removed meeting {result.slug}")
-    console.print(f"Removed paths: {len(result.removed_paths)}")
+
+
+def _meeting_has_published_items(connection, meeting_id: str) -> bool:
+    row = connection.execute(
+        "SELECT 1 FROM published_items WHERE meeting_id = ? LIMIT 1",
+        (meeting_id,),
+    ).fetchone()
+    return row is not None
 
 
 @meetings_app.command("status")

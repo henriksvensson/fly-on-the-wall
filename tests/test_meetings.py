@@ -261,3 +261,50 @@ def test_delete_meeting_removes_database_rows_and_owned_files(tmp_path: Path) ->
     assert not (storage.exports / "intro").exists()
     assert not voice_sample_path.exists()
     assert not embedding_path.exists()
+
+
+def test_delete_meeting_can_remove_published_notes(tmp_path: Path) -> None:
+    storage = ensure_storage_layout(tmp_path / "storage")
+    published_path = tmp_path / "vault" / "Intro.md"
+    _insert_published_meeting(tmp_path, published_path)
+
+    with database(tmp_path / "fly.db") as connection:
+        delete_meeting(connection, "intro", storage, delete_published=True)
+
+    assert not published_path.exists()
+
+
+def test_delete_meeting_keeps_published_notes_by_default(tmp_path: Path) -> None:
+    storage = ensure_storage_layout(tmp_path / "storage")
+    published_path = tmp_path / "vault" / "Intro.md"
+    _insert_published_meeting(tmp_path, published_path)
+
+    with database(tmp_path / "fly.db") as connection:
+        delete_meeting(connection, "intro", storage)
+
+    assert published_path.exists()
+
+
+def _insert_published_meeting(tmp_path: Path, published_path: Path) -> None:
+    published_path.parent.mkdir(parents=True)
+    published_path.write_text("published")
+    with database(tmp_path / "fly.db") as connection:
+        connection.execute(
+            "INSERT INTO meetings(id, slug, title, language) VALUES (?, ?, ?, ?)",
+            ("meeting-1", "intro", "Intro", "sv"),
+        )
+        connection.execute(
+            """
+            INSERT INTO publish_targets(id, name, target_type, path, settings_json)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("target-1", "obsidian", "obsidian", str(published_path.parent), "{}"),
+        )
+        connection.execute(
+            """
+            INSERT INTO published_items(id, meeting_id, target_id, output_path, content_sha256)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("published-1", "meeting-1", "target-1", str(published_path), "hash"),
+        )
+        connection.commit()
