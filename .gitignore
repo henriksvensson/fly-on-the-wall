@@ -6,6 +6,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+dist/
 
 # Local/generated transcription outputs and private meeting data.
 audio-samples/
