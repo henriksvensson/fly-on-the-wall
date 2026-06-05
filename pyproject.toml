@@ -34,7 +34,7 @@ identity = [
 ]
 
 [project.urls]
-Repository = "https://github.com/person_a/fly-on-the-wall"
+Repository = "https://github.com/henriksvensson/fly-on-the-wall"
 
 [project.scripts]
 fot = "fly_on_the_wall.cli:app"
