@@ -20,11 +20,11 @@ def test_export_markdown_transcript_writes_immutable_snapshot(tmp_path: Path) ->
         first = export_markdown_transcript(
             connection,
             "meeting-1",
-            "Person B [sv] (speaker_0): Hej\n\nUnknown [sv] (speaker_1): Hallå",
+            "Person A [sv] (speaker_0): Hej\n\nUnknown [sv] (speaker_1): Hallå",
             "# Meeting Analysis\n\n## Summary\n\nShort summary.",
             storage,
         )
-        second = export_markdown_transcript(connection, "meeting-1", "Person B: Hej", "# Meeting Analysis", storage)
+        second = export_markdown_transcript(connection, "meeting-1", "Person A: Hej", "# Meeting Analysis", storage)
         rows = connection.execute("SELECT * FROM exports ORDER BY created_at").fetchall()
 
     assert first.output_dir != second.output_dir
@@ -34,9 +34,9 @@ def test_export_markdown_transcript_writes_immutable_snapshot(tmp_path: Path) ->
         "Time: 10:09:00\n"
         "Location: Unknown\n"
         "Position: Unknown\n"
-        "People: Person B, Unknown speaker 1\n\n"
+        "People: Person A, Unknown speaker 1\n\n"
         "## Manuscript\n\n"
-        "**Person B:** Hej\n\n"
+        "**Person A:** Hej\n\n"
         "**Unknown speaker 1:** Hallå\n"
     )
     assert first.analysis_path.read_text() == "# Meeting Analysis\n\n## Summary\n\nShort summary.\n"
@@ -48,7 +48,7 @@ def test_export_markdown_transcript_writes_immutable_snapshot(tmp_path: Path) ->
 def test_export_markdown_transcript_rejects_missing_meeting(tmp_path: Path) -> None:
     with database(tmp_path / "fly.db") as connection:
         try:
-            export_markdown_transcript(connection, "missing", "Person B: Hej", "# Meeting Analysis")
+            export_markdown_transcript(connection, "missing", "Person A: Hej", "# Meeting Analysis")
         except ValueError as exc:
             assert "Meeting does not exist" in str(exc)
         else:
@@ -81,7 +81,7 @@ def test_export_markdown_transcript_prefers_recording_timestamp(tmp_path: Path) 
             ),
         )
 
-        result = export_markdown_transcript(connection, "meeting-1", "Person B: Hej", "# Meeting Analysis", storage)
+        result = export_markdown_transcript(connection, "meeting-1", "Person A: Hej", "# Meeting Analysis", storage)
 
     assert "Date: 2026-06-02" in result.transcript_path.read_text()
     assert "Time: 10:09:00" in result.transcript_path.read_text()

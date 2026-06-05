@@ -40,7 +40,7 @@ def test_list_uncertain_speakers_returns_suggestions(tmp_path) -> None:
 
     assert len(uncertain) == 1
     assert uncertain[0]["id"] == "local-1"
-    assert uncertain[0]["suggested_person_name"] == "Person B"
+    assert uncertain[0]["suggested_person_name"] == "Person A"
     assert uncertain[0]["confidence"] == 0.73
     assert [speaker["review_kind"] for speaker in review] == ["uncertain"]
 
@@ -53,7 +53,7 @@ def test_confirm_speaker_assignment_promotes_uncertain_match(tmp_path) -> None:
         confirmed = confirm_speaker_assignment(connection, "local-1")
         assignment = connection.execute("SELECT status, person_id FROM speaker_assignments").fetchone()
 
-    assert confirmed["name"] == "Person B"
+    assert confirmed["name"] == "Person A"
     assert assignment["status"] == "known"
     assert assignment["person_id"] == "person-1"
 
@@ -89,7 +89,7 @@ def _insert_unknown_fixture(connection) -> None:
 def _insert_uncertain_assignment(connection) -> None:
     connection.execute(
         "INSERT INTO people(id, display_name) VALUES (?, ?)",
-        ("person-1", "Person B"),
+        ("person-1", "Person A"),
     )
     connection.execute(
         """

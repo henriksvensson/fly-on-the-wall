@@ -58,19 +58,19 @@ def test_match_local_speakers_preserves_user_corrections(tmp_path: Path) -> None
 def _insert_matching_fixture(connection, tmp_path: Path) -> None:
     _insert_base_local_speaker(connection)
     local_embedding = tmp_path / "local.json"
-    anna_embedding = tmp_path / "person_b.json"
+    person_a_embedding = tmp_path / "person_a.json"
     bob_embedding = tmp_path / "bob.json"
     local_embedding.write_text(json.dumps({"vector": [1.0, 0.0]}))
-    anna_embedding.write_text(json.dumps({"vector": [1.0, 0.0]}))
+    person_a_embedding.write_text(json.dumps({"vector": [1.0, 0.0]}))
     bob_embedding.write_text(json.dumps({"vector": [0.0, 1.0]}))
-    connection.execute("INSERT INTO people(id, display_name) VALUES (?, ?)", ("person-1", "Person B"))
+    connection.execute("INSERT INTO people(id, display_name) VALUES (?, ?)", ("person-1", "Person A"))
     connection.execute("INSERT INTO people(id, display_name) VALUES (?, ?)", ("person-2", "Bob"))
     connection.execute(
         """
         INSERT INTO voice_samples(id, person_id, audio_path, embedding_model, embedding_path)
         VALUES (?, ?, ?, ?, ?)
         """,
-        ("voice-1", "person-1", "person_b.wav", "fake", str(anna_embedding)),
+        ("voice-1", "person-1", "person_a.wav", "fake", str(person_a_embedding)),
     )
     connection.execute(
         """

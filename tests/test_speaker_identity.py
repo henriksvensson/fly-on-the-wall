@@ -27,7 +27,7 @@ def test_create_voice_identity_from_speaker_creates_sample_and_embeddings(tmp_pa
 
     with database(tmp_path / "fly.db") as connection:
         _insert_speaker_fixture(connection, source_audio_path)
-        person = create_person(connection, "Person B")
+        person = create_person(connection, "Person A")
         result = create_voice_identity_from_speaker(
             connection,
             "local-1",
@@ -39,7 +39,7 @@ def test_create_voice_identity_from_speaker_creates_sample_and_embeddings(tmp_pa
         sample = connection.execute("SELECT * FROM voice_samples").fetchone()
         local_embedding = connection.execute("SELECT * FROM local_speaker_embeddings").fetchone()
 
-    assert result.person_name == "Person B"
+    assert result.person_name == "Person A"
     assert result.embedded is True
     assert result.voice_sample.audio_path.read_bytes() == b"clip"
     assert assignment["person_id"] == person.id
@@ -65,15 +65,15 @@ def test_create_voice_identity_from_speaker_can_create_person(tmp_path: Path, mo
         result = create_voice_identity_from_speaker(
             connection,
             "local-1",
-            "Person B",
+            "Person A",
             create_missing_person=True,
             storage=storage,
         )
         person = connection.execute("SELECT * FROM people").fetchone()
 
-    assert result.person_name == "Person B"
+    assert result.person_name == "Person A"
     assert result.embedded is False
-    assert person["display_name"] == "Person B"
+    assert person["display_name"] == "Person A"
 
 
 def _insert_speaker_fixture(connection, source_audio_path: Path) -> None:

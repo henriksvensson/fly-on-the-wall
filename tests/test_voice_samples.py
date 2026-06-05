@@ -16,7 +16,7 @@ def test_create_voice_sample_from_clip_copies_file(tmp_path: Path) -> None:
     storage = ensure_storage_layout(tmp_path / "storage")
 
     with database(tmp_path / "fly.db") as connection:
-        person = create_person(connection, "Person B")
+        person = create_person(connection, "Person A")
         sample = create_voice_sample_from_clip(connection, person.id, clip_path, storage)
         samples = list_voice_samples(connection, person.id)
 
@@ -39,7 +39,7 @@ def test_create_voice_sample_from_span_extracts_clip(tmp_path: Path, monkeypatch
     monkeypatch.setattr("fly_on_the_wall.voice_samples.extract_clip", fake_extract)
 
     with database(tmp_path / "fly.db") as connection:
-        person = create_person(connection, "Person B")
+        person = create_person(connection, "Person A")
         connection.execute(
             "INSERT INTO meetings(id, slug, title, language) VALUES (?, ?, ?, ?)",
             ("meeting-1", "meeting-1", "Meeting", "sv"),

@@ -15,7 +15,7 @@ from fly_on_the_wall.storage import ensure_storage_layout
 
 
 def test_slugify_normalizes_titles() -> None:
-    assert slugify("Intro Call With Person B!") == "intro-call-with-person_b"
+    assert slugify("Intro Call With Person A!") == "intro-call-with-person-a"
     assert slugify("!!!") == "meeting"
 
 
@@ -40,7 +40,7 @@ def test_import_meeting_copies_audio_and_creates_record(tmp_path: Path, monkeypa
         meeting = import_meeting(
             connection,
             audio_path,
-            "Intro Call With Person B",
+            "Intro Call With Person A",
             AppConfig(language="sv"),
             storage,
             description="First call",
@@ -48,9 +48,9 @@ def test_import_meeting_copies_audio_and_creates_record(tmp_path: Path, monkeypa
         row = connection.execute("SELECT * FROM meetings WHERE id = ?", (meeting.id,)).fetchone()
         metadata = connection.execute("SELECT * FROM audio_metadata WHERE meeting_id = ?", (meeting.id,)).fetchone()
 
-    assert meeting.slug == "intro-call-with-person_b"
+    assert meeting.slug == "intro-call-with-person-a"
     assert meeting.imported_audio_path.read_bytes() == b"fake audio"
-    assert row["title"] == "Intro Call With Person B"
+    assert row["title"] == "Intro Call With Person A"
     assert row["title_source"] == "manual"
     assert row["description"] == "First call"
     assert row["language"] == "sv"
@@ -199,7 +199,7 @@ def test_delete_meeting_removes_database_rows_and_owned_files(tmp_path: Path) ->
             """,
             ("meeting-1", "intro", "Intro", "sv", str(imported_audio_path)),
         )
-        connection.execute("INSERT INTO people(id, display_name) VALUES (?, ?)", ("person-1", "Person B"))
+        connection.execute("INSERT INTO people(id, display_name) VALUES (?, ?)", ("person-1", "Person A"))
         connection.execute(
             """
             INSERT INTO provider_runs(id, meeting_id, provider, model, raw_response_path, status)

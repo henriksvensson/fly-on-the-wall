@@ -27,7 +27,7 @@ def test_cache_voice_sample_embedding_updates_sample(tmp_path: Path) -> None:
     storage = ensure_storage_layout(tmp_path / "storage")
 
     with database(tmp_path / "fly.db") as connection:
-        person = create_person(connection, "Person B")
+        person = create_person(connection, "Person A")
         sample = create_voice_sample_from_clip(connection, person.id, clip_path, storage)
         cached = cache_voice_sample_embedding(connection, sample.id, FakeBackend(), storage)
         row = connection.execute("SELECT * FROM voice_samples WHERE id = ?", (sample.id,)).fetchone()

@@ -309,7 +309,7 @@ def test_speakers_review_can_create_new_person_without_voice_sample(monkeypatch)
     monkeypatch.setattr(cli_speaker_review, "speaker_examples", lambda connection, speaker_id, limit=1: [])
     monkeypatch.setattr(cli_speaker_review, "prepare_speaker_review_clip", lambda connection, speaker_id: None)
     monkeypatch.setattr(cli_speaker_review, "_select_speaker_review_action", lambda clip_path, can_confirm=False: "o")
-    monkeypatch.setattr(cli_speaker_review.typer, "prompt", lambda *args, **kwargs: "Person B")
+    monkeypatch.setattr(cli_speaker_review.typer, "prompt", lambda *args, **kwargs: "Person A")
     monkeypatch.setattr(
         cli_speaker_review,
         "assign_speaker_to_person",
@@ -320,7 +320,7 @@ def test_speakers_review_can_create_new_person_without_voice_sample(monkeypatch)
     result = runner.invoke(app, ["meetings", "speakers", "review"])
 
     assert result.exit_code == 0
-    assert "Created known person Person B" in result.stdout
+    assert "Created known person Person A" in result.stdout
     assert "without voice sample" in result.stdout
 
 
@@ -336,7 +336,7 @@ def test_speakers_review_can_confirm_uncertain_suggestion(monkeypatch) -> None:
             "label": "speaker_0",
             "review_kind": "uncertain",
             "suggested_person_id": "person-1",
-            "suggested_person_name": "Person B",
+            "suggested_person_name": "Person A",
             "confidence": 0.73,
             "margin": 0.11,
         }
@@ -360,15 +360,15 @@ def test_speakers_review_can_confirm_uncertain_suggestion(monkeypatch) -> None:
     monkeypatch.setattr(
         cli_speaker_review,
         "confirm_speaker_assignment",
-        lambda connection, speaker_id: {"name": "Person B"},
+        lambda connection, speaker_id: {"name": "Person A"},
     )
     monkeypatch.setattr(cli_speaker_review, "_speaker_review_follow_up", lambda connection, changed: set())
 
     result = runner.invoke(app, ["meetings", "speakers", "review", "--only-uncertain"])
 
     assert result.exit_code == 0
-    assert "Suggested person: Person B" in result.stdout
-    assert "Confirmed meeting speaker as Person B" in result.stdout
+    assert "Suggested person: Person A" in result.stdout
+    assert "Confirmed meeting speaker as Person A" in result.stdout
 
 
 def test_speaker_review_follow_up_can_reanalyze_unknown_speakers(monkeypatch) -> None:

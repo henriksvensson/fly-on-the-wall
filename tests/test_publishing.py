@@ -44,7 +44,7 @@ def test_publish_meeting_writes_and_updates_obsidian_note(tmp_path: Path) -> Non
         export_markdown_transcript(
             connection,
             "meeting-1",
-            "Person B: Hej där alla",
+            "Person A: Hej där alla",
             "# Meeting Analysis\n\n## Summary\n\nUseful discussion.",
             storage,
         )
@@ -55,7 +55,7 @@ def test_publish_meeting_writes_and_updates_obsidian_note(tmp_path: Path) -> Non
         export_markdown_transcript(
             connection,
             "meeting-1",
-            "Person B: Hej där alla igen",
+            "Person A: Hej där alla igen",
             "# Meeting Analysis\n\n## Summary\n\nUpdated discussion.",
             storage,
         )
@@ -70,7 +70,7 @@ def test_publish_meeting_writes_and_updates_obsidian_note(tmp_path: Path) -> Non
     assert "Updated discussion." in note
     assert "## Manuscript" in note
     assert "## Transcript" not in note
-    assert "**Person B:** Hej där alla igen" in note
+    assert "**Person A:** Hej där alla igen" in note
     assert "managed by Fly on the Wall" in note
 
 
@@ -147,7 +147,7 @@ def test_publish_all_meetings_publishes_every_exported_meeting(tmp_path: Path) -
             export_markdown_transcript(
                 connection,
                 meeting_id,
-                "Person B: Hej där alla",
+                "Person A: Hej där alla",
                 "# Meeting Analysis\n\n## Summary\n\nUseful discussion.",
                 storage,
             )
@@ -175,7 +175,7 @@ def test_publish_all_meetings_can_skip_already_published(tmp_path: Path) -> None
         export_markdown_transcript(
             connection,
             "meeting-1",
-            "Person B: Hej där alla",
+            "Person A: Hej där alla",
             "# Meeting Analysis\n\n## Summary\n\nUseful discussion.",
             storage,
         )
@@ -193,7 +193,9 @@ def test_publish_meeting_handles_legacy_manifest_without_analysis_path(tmp_path:
     export_dir.mkdir(parents=True)
     transcript_path = export_dir / "transcript.md"
     manifest_path = export_dir / "manifest.json"
-    transcript_path.write_text("# Intro Call\n\nDate: 2026-06-02\nTime: 10:09:00\n\n## Transcript\n\n**Person B:** Hej\n")
+    transcript_path.write_text(
+        "# Intro Call\n\nDate: 2026-06-02\nTime: 10:09:00\n\n## Transcript\n\n**Person A:** Hej\n"
+    )
     manifest_path.write_text(
         json.dumps(
             {
@@ -228,4 +230,4 @@ def test_publish_meeting_handles_legacy_manifest_without_analysis_path(tmp_path:
     assert "No analysis export found" in note
     assert "## Manuscript" in note
     assert "## Transcript" not in note
-    assert "**Person B:** Hej" in note
+    assert "**Person A:** Hej" in note

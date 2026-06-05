@@ -23,7 +23,7 @@ def test_people_embedding_status_counts_voice_samples(tmp_path: Path) -> None:
     storage = ensure_storage_layout(tmp_path / "storage")
 
     with database(tmp_path / "fly.db") as connection:
-        person = create_person(connection, "Person B")
+        person = create_person(connection, "Person A")
         sample = create_voice_sample_from_clip(connection, person.id, clip_path, storage)
         connection.execute(
             "UPDATE voice_samples SET embedding_path = ? WHERE id = ?",
@@ -46,7 +46,7 @@ def test_backfill_people_embeddings_embeds_missing_voice_samples(
     storage = ensure_storage_layout(tmp_path / "storage")
 
     with database(tmp_path / "fly.db") as connection:
-        person = create_person(connection, "Person B")
+        person = create_person(connection, "Person A")
         sample = create_voice_sample_from_clip(connection, person.id, clip_path, storage)
 
         result = backfill_people_embeddings(connection, storage, FakeBackend())

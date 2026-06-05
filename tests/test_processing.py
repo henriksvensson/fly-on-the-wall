@@ -381,7 +381,7 @@ def test_refresh_meeting_reexports_without_transcription(tmp_path: Path) -> None
             transcribe_fn=fake_transcribe,
         )
         local_speaker_id = connection.execute("SELECT id FROM local_speakers").fetchone()["id"]
-        person = create_person(connection, "Person B")
+        person = create_person(connection, "Person A")
         assign_speaker_to_person(connection, local_speaker_id, person.id)
         refreshed = refresh_meeting(
             connection,
@@ -393,7 +393,7 @@ def test_refresh_meeting_reexports_without_transcription(tmp_path: Path) -> None
     assert transcribe_calls == 1
     assert refreshed.provider_run_id == "run-1"
     assert refreshed.export.transcript_path != processed.export.transcript_path
-    assert "**Person B:** Hej" in refreshed.export.transcript_path.read_text()
+    assert "**Person A:** Hej" in refreshed.export.transcript_path.read_text()
 
 
 def test_process_audio_applies_generated_title_for_filename_title(tmp_path: Path, monkeypatch) -> None:
