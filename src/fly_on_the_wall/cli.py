@@ -59,7 +59,7 @@ from fly_on_the_wall.speakers import (
 from fly_on_the_wall.voice_samples import list_voice_samples
 
 app = typer.Typer(
-    name="fot",
+    name="fow",
     help="Personal CLI note-taker for meeting audio.",
     no_args_is_help=True,
 )
@@ -152,7 +152,7 @@ def process(
     console.print(f"Processed meeting {result.meeting.slug}")
     console.print(f"Transcript: {result.export.transcript_path}")
     console.print(f"Analysis: {result.export.analysis_path}")
-    console.print(f"Review unknown speakers: fot meetings speakers unknown --meeting {result.meeting.slug}")
+    console.print(f"Review unknown speakers: fow meetings speakers unknown --meeting {result.meeting.slug}")
 
 
 @meetings_app.command("list")
@@ -161,7 +161,7 @@ def meetings_list() -> None:
     with database() as connection:
         meetings = list_meetings(connection)
     if not meetings:
-        console.print("No meetings found. Process one with: fot process <audio>")
+        console.print("No meetings found. Process one with: fow process <audio>")
         return
     table = Table(title="Meetings")
     table.add_column("Slug")
@@ -301,7 +301,7 @@ def speakers_assign(local_speaker_id: str, person: str) -> None:
     if assignment["created_person"]:
         console.print(f"Created person {assignment['name']}")
     console.print(f"Assigned {assignment['local_speaker_id']} to {assignment['name']}")
-    console.print("Next: fot refresh speakers <meeting>")
+    console.print("Next: fow refresh speakers <meeting>")
 
 
 @meeting_speakers_app.command("ignore")
@@ -367,7 +367,7 @@ def _print_speaker_refresh_results(results) -> None:
 
 def _print_speaker_refresh_next_step(results) -> None:
     if any(result["match_count"] for result in results):
-        console.print("Next: fot refresh stale-meetings")
+        console.print("Next: fow refresh stale-meetings")
         return
     console.print("No speaker assignment changes; downstream stages left untouched.")
 
@@ -473,7 +473,7 @@ def people_list() -> None:
         people = list_people(connection)
 
     if not people:
-        console.print('No people found. Create one with: fot people create "Name"')
+        console.print('No people found. Create one with: fow people create "Name"')
         return
 
     table = Table(title="People")
@@ -595,7 +595,7 @@ def people_embeddings_backfill() -> None:
 
     console.print(f"People voice embedding backfill complete: {result.embedded} embedded, " f"{result.failed} failed.")
     if result.embedded:
-        console.print("Next: fot refresh speakers")
+        console.print("Next: fow refresh speakers")
 
 
 @secrets_app.command("status")

@@ -12,7 +12,7 @@ This is early alpha software. It is usable as a local personal CLI, but command 
 
 ## What It Does
 
-`fot process <audio>` runs the main pipeline:
+`fow process <audio>` runs the main pipeline:
 
 1. Imports the audio into local app storage.
 2. Extracts audio metadata and recording timestamps where possible.
@@ -46,7 +46,7 @@ Install the CLI with `uv tool`:
 
 ```bash
 uv tool install fly-on-the-wall
-fot setup
+fow setup
 ```
 
 Speaker identity matching is optional and adds heavier local ML dependencies:
@@ -65,7 +65,7 @@ Development from a source checkout also uses `uv`:
 
 ```bash
 uv sync
-uv run fot
+uv run fow
 ```
 
 Include speaker identity dependencies during local development with:
@@ -74,10 +74,10 @@ Include speaker identity dependencies during local development with:
 uv sync --extra identity
 ```
 
-You can point `fot` at `uv run fot` with a shell alias:
+You can point `fow` at `uv run fow` with a shell alias:
 
 ```bash
-alias fot="uv run fot"
+alias fow="uv run fow"
 ```
 
 ## Configuration And Secrets
@@ -99,10 +99,10 @@ API keys are read from environment variables first, then from the OS keyring.
 Useful secret commands:
 
 ```bash
-fot secrets status
-fot secrets set elevenlabs
-fot secrets set openai
-fot secrets remove openai
+fow secrets status
+fow secrets set elevenlabs
+fow secrets set openai
+fow secrets remove openai
 ```
 
 Expected environment variables:
@@ -117,7 +117,7 @@ OPENAI_API_KEY
 Run the interactive setup wizard:
 
 ```bash
-fot setup
+fow setup
 ```
 
 It checks required dependencies, helps store API keys, sets your user identity, and can configure Obsidian publishing and watched folders.
@@ -125,43 +125,43 @@ It checks required dependencies, helps store API keys, sets your user identity, 
 Process one recording:
 
 ```bash
-fot process path/to/meeting.m4a
+fow process path/to/meeting.m4a
 ```
 
 Optionally provide a manual title and context:
 
 ```bash
-fot process path/to/meeting.m4a --title "Board prep" --description "Monthly board preparation call"
+fow process path/to/meeting.m4a --title "Board prep" --description "Monthly board preparation call"
 ```
 
 List meetings:
 
 ```bash
-fot meetings list
+fow meetings list
 ```
 
 Show one meeting:
 
 ```bash
-fot meetings show <meeting>
+fow meetings show <meeting>
 ```
 
 Show pipeline status:
 
 ```bash
-fot meetings status <meeting>
+fow meetings status <meeting>
 ```
 
 Refresh derived outputs for one meeting without retranscribing:
 
 ```bash
-fot refresh meeting <meeting>
+fow refresh meeting <meeting>
 ```
 
 Refresh every meeting with stale derived outputs:
 
 ```bash
-fot refresh stale-meetings
+fow refresh stale-meetings
 ```
 
 ## People And Speakers
@@ -174,57 +174,57 @@ The CLI uses two related concepts:
 Manage known people:
 
 ```bash
-fot people list
-fot people create "Person A"
-fot people show "Person A"
+fow people list
+fow people create "Person A"
+fow people show "Person A"
 ```
 
 Review unknown meeting speakers interactively:
 
 ```bash
-fot meetings speakers review
-fot meetings speakers review --include-uncertain
-fot meetings speakers review --only-uncertain
+fow meetings speakers review
+fow meetings speakers review --include-uncertain
+fow meetings speakers review --only-uncertain
 ```
 
 Review speakers for one meeting:
 
 ```bash
-fot meetings speakers review --meeting <meeting>
+fow meetings speakers review --meeting <meeting>
 ```
 
 List meeting speakers that are not assigned to known people:
 
 ```bash
-fot meetings speakers unknown
-fot meetings speakers unknown --meeting <meeting>
+fow meetings speakers unknown
+fow meetings speakers unknown --meeting <meeting>
 ```
 
 Assign a meeting speaker to a known person, creating the person if needed:
 
 ```bash
-fot meetings speakers assign <local-speaker-id> "Person A"
+fow meetings speakers assign <local-speaker-id> "Person A"
 ```
 
 Ignore a meeting speaker so it does not appear in future reviews:
 
 ```bash
-fot meetings speakers ignore <local-speaker-id>
+fow meetings speakers ignore <local-speaker-id>
 ```
 
 Refresh speaker matching after adding voice samples or changing identities:
 
 ```bash
-fot refresh speakers
-fot refresh speakers <meeting>
-fot refresh speakers --include-known-speakers
+fow refresh speakers
+fow refresh speakers <meeting>
+fow refresh speakers --include-known-speakers
 ```
 
 Backfill missing known-person voice embeddings:
 
 ```bash
-fot people embeddings status
-fot people embeddings backfill
+fow people embeddings status
+fow people embeddings backfill
 ```
 
 ## Watched Folders
@@ -234,25 +234,25 @@ Fly on the Wall can watch local folders, mounted Dropbox/rclone folders, and rem
 Add a folder:
 
 ```bash
-fot watch folders add /path/to/recordings --name recordings
+fow watch folders add /path/to/recordings --name recordings
 ```
 
 List watched folders:
 
 ```bash
-fot watch folders list
+fow watch folders list
 ```
 
 Run one scan:
 
 ```bash
-fot watch scan
+fow watch scan
 ```
 
 Watch continuously:
 
 ```bash
-fot watch run
+fow watch run
 ```
 
 The watcher tolerates missing/remounted folders and uses periodic scans because cloud/removable mounts may not emit reliable filesystem events.
@@ -266,19 +266,19 @@ Internal exports are immutable. Obsidian notes are mutable and idempotent, so re
 Add an Obsidian target:
 
 ```bash
-fot publish targets add obsidian "/path/to/Obsidian Vault/Fly on the Wall" --name obsidian --auto-publish
+fow publish targets add obsidian "/path/to/Obsidian Vault/Fly on the Wall" --name obsidian --auto-publish
 ```
 
 Publish one meeting:
 
 ```bash
-fot publish meeting <meeting> --target obsidian
+fow publish meeting <meeting> --target obsidian
 ```
 
 Publish all exported meetings:
 
 ```bash
-fot publish all --target obsidian
+fow publish all --target obsidian
 ```
 
 ## Cost Tracking
@@ -294,13 +294,13 @@ It tracks:
 Show total estimated costs:
 
 ```bash
-fot costs summary
+fow costs summary
 ```
 
 Show estimated costs for one meeting:
 
 ```bash
-fot costs meeting <meeting>
+fow costs meeting <meeting>
 ```
 
 Historical ElevenLabs usage can be backfilled accurately from stored raw responses. Historical OpenAI usage can only be approximated unless raw OpenAI response usage was stored.
@@ -379,7 +379,7 @@ Test a built wheel locally:
 
 ```bash
 uv tool install dist/fly_on_the_wall-0.1.0-py3-none-any.whl
-fot setup
+fow setup
 ```
 
 Publish to PyPI after verifying the build, package name, and license metadata:

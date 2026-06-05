@@ -61,7 +61,7 @@ def watch_run(
     folders = _enabled_watch_folders()
     if not folders:
         console.print("No enabled watch folders configured.")
-        console.print("Add one with: fot watch folders add <path>")
+        console.print("Add one with: fow watch folders add <path>")
         raise typer.Exit(code=1)
 
     console.print("Watching folders for audio changes. Press Ctrl+C to stop.")

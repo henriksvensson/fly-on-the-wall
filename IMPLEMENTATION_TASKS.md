@@ -12,7 +12,7 @@
 - [x] **Add SQLite foundation**
    Create database connection, migrations/bootstrap, and initial tables for meetings, people, stages, and provider runs.
 
-- [x] **Implement `fot doctor`**
+- [x] **Implement `fow doctor`**
    Check Python environment, FFmpeg availability, config paths, storage paths, and required API keys.
 
 - [x] **Implement meeting import**
@@ -60,7 +60,7 @@
 - [x] **Implement immutable markdown export**
     Export cleaned named transcript and manifest without overwriting previous exports.
 
-- [x] **Implement `fot process`**
+- [x] **Implement `fow process`**
     Run import through export as one convenience command using the same stage runner.
 
 - [x] **Add meeting commands**

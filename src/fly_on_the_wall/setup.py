@@ -45,7 +45,7 @@ def _show_runtime_summary(console: Console) -> None:
 
     if which("ffmpeg") is None:
         console.print("FFmpeg is required for audio processing.")
-        console.print("Install it with your OS package manager, then run `fot doctor`.")
+        console.print("Install it with your OS package manager, then run `fow doctor`.")
     console.print("")
 
 
@@ -116,7 +116,7 @@ def _setup_speaker_identity(console: Console) -> None:
         console.print("- local speaker identity dependencies: available")
         console.print("- voice sample embeddings: " f"{status.embedded_voice_samples}/{status.voice_samples} embedded")
         if status.missing_voice_sample_embeddings:
-            console.print("Run `fot people embeddings backfill` to embed missing voice samples.")
+            console.print("Run `fow people embeddings backfill` to embed missing voice samples.")
         console.print("")
         return
 
@@ -208,10 +208,10 @@ def _show_final_summary(console: Console) -> None:
     if required_failures:
         for check in required_failures:
             console.print(f"  missing: {check.name} ({check.detail})")
-        console.print("Run `fot doctor` after fixing missing items.")
+        console.print("Run `fow doctor` after fixing missing items.")
     else:
         console.print("Fly on the Wall is ready.")
-        console.print("Next: `fot process path/to/meeting.m4a`")
+        console.print("Next: `fow process path/to/meeting.m4a`")
 
 
 def _module_available(module_name: str) -> bool:

@@ -52,71 +52,71 @@
 - API keys are read from environment variables first, then the OS keyring.
 - Do not auto-load `.env` or `.envrc` files.
 - Do not add app-owned plaintext secret files.
-- Provide `fot secrets` commands for keyring management.
+- Provide `fow secrets` commands for keyring management.
 
 ## CLI Model
 
 - Keep the top-level CLI small and domain-oriented.
 - Keep low-level operations available when they help automation.
-- `fot process <audio>` is the main end-to-end command.
+- `fow process <audio>` is the main end-to-end command.
 - Standalone `import` was removed because import without processing was not useful in normal use.
-- Top-level `status` was moved to `fot meetings status`.
-- Speaker review commands live under `fot meetings speakers` because speakers are meeting-local diarization labels.
+- Top-level `status` was moved to `fow meetings status`.
+- Speaker review commands live under `fow meetings speakers` because speakers are meeting-local diarization labels.
 
 Current command shape:
 
 ```bash
-fot process <audio>
-fot setup
-fot doctor
+fow process <audio>
+fow setup
+fow doctor
 
-fot meetings list
-fot meetings show <meeting>
-fot meetings rename <meeting> "Title"
-fot meetings remove <meeting>
-fot meetings status <meeting>
+fow meetings list
+fow meetings show <meeting>
+fow meetings rename <meeting> "Title"
+fow meetings remove <meeting>
+fow meetings status <meeting>
 
-fot meetings speakers unknown [--meeting <meeting>]
-fot meetings speakers review [--meeting <meeting>]
-fot meetings speakers assign <local-speaker-id> "Person A"
-fot meetings speakers ignore <local-speaker-id>
+fow meetings speakers unknown [--meeting <meeting>]
+fow meetings speakers review [--meeting <meeting>]
+fow meetings speakers assign <local-speaker-id> "Person A"
+fow meetings speakers ignore <local-speaker-id>
 
-fot people list
-fot people create "Person A"
-fot people show "Person A"
-fot people set-user "Person A"
-fot people show-user
-fot people unset-user
-fot people voice-samples "Person A"
-fot people embeddings status
-fot people embeddings backfill
+fow people list
+fow people create "Person A"
+fow people show "Person A"
+fow people set-user "Person A"
+fow people show-user
+fow people unset-user
+fow people voice-samples "Person A"
+fow people embeddings status
+fow people embeddings backfill
 
-fot refresh speakers [<meeting>] [--include-known-speakers]
-fot refresh stale-meetings [--dry-run]
-fot refresh meeting <meeting>
+fow refresh speakers [<meeting>] [--include-known-speakers]
+fow refresh stale-meetings [--dry-run]
+fow refresh meeting <meeting>
 
-fot watch folders add <path> [--name <name>]
-fot watch folders list
-fot watch folders remove <id-or-name-or-path>
-fot watch folders enable <id-or-name-or-path>
-fot watch folders disable <id-or-name-or-path>
-fot watch scan
-fot watch run
+fow watch folders add <path> [--name <name>]
+fow watch folders list
+fow watch folders remove <id-or-name-or-path>
+fow watch folders enable <id-or-name-or-path>
+fow watch folders disable <id-or-name-or-path>
+fow watch scan
+fow watch run
 
-fot publish targets add obsidian <path> --name <name> [--auto-publish]
-fot publish targets list
-fot publish targets remove <name-or-id>
-fot publish targets enable <name-or-id>
-fot publish targets disable <name-or-id>
-fot publish meeting <meeting> --target <target>
-fot publish all --target <target>
+fow publish targets add obsidian <path> --name <name> [--auto-publish]
+fow publish targets list
+fow publish targets remove <name-or-id>
+fow publish targets enable <name-or-id>
+fow publish targets disable <name-or-id>
+fow publish meeting <meeting> --target <target>
+fow publish all --target <target>
 
-fot costs summary
-fot costs meeting <meeting>
+fow costs summary
+fow costs meeting <meeting>
 
-fot secrets status
-fot secrets set <provider>
-fot secrets remove <provider>
+fow secrets status
+fow secrets set <provider>
+fow secrets remove <provider>
 ```
 
 ## Pipeline Model
@@ -189,7 +189,7 @@ import audio into app storage
   - clip extraction
   - normalization for embeddings
   - playback with interruption
-- `fot doctor` checks runtime dependencies and embedding readiness.
+- `fow doctor` checks runtime dependencies and embedding readiness.
 
 ## Core Data Model
 
@@ -277,9 +277,9 @@ Important relationships:
 
 - Adding a new person or voice sample should not automatically refresh all old meetings.
 - Instead, refresh speaker matching explicitly and mark affected downstream stages stale only when assignments change.
-- `fot refresh speakers` refreshes speaker matching.
-- `fot refresh stale-meetings` refreshes meetings with stale derived stages.
-- `fot refresh meeting <meeting>` refreshes one meeting's derived outputs without retranscription.
+- `fow refresh speakers` refreshes speaker matching.
+- `fow refresh stale-meetings` refreshes meetings with stale derived stages.
+- `fow refresh meeting <meeting>` refreshes one meeting's derived outputs without retranscription.
 - Refresh should avoid expensive stages when cached artifacts are sufficient.
 
 Examples:

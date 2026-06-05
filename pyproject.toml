@@ -37,7 +37,7 @@ identity = [
 Repository = "https://github.com/henriksvensson/fly-on-the-wall"
 
 [project.scripts]
-fot = "fly_on_the_wall.cli:app"
+fow = "fly_on_the_wall.cli:app"
 
 [dependency-groups]
 dev = [
