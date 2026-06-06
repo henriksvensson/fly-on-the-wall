@@ -397,3 +397,9 @@ Publish to PyPI after verifying the build, package name, and license metadata:
 ```bash
 uv publish
 ```
+
+## Support
+
+If Fly on the Wall is useful to you, and you have the spare cash, buying me a coffee would be lovely. Absolutely no pressure.
+
+[![Buy Me A Coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=&slug=henriksvensson&button_colour=FFDD00&font_colour=000000&font_family=Lato&outline_colour=000000&coffee_colour=ffffff)](https://buymeacoffee.com/henriksvensson)
