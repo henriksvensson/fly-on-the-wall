@@ -10,6 +10,16 @@ The tool is designed for one person running it locally. There is no hosted servi
 
 This is early alpha software. It is usable as a local personal CLI, but command behavior, storage schema, and output formats may still change between releases.
 
+Until `1.0`, minor releases may include breaking changes. Back up `~/.local/share/fly-on-the-wall/` before upgrading if you depend on stored meeting data.
+
+Issues and suggestions are welcome via GitHub Issues, but the project is provided as-is with no support guarantee.
+
+Audio is sent to configured transcription/AI providers during processing. Optional speaker identity embeddings run locally when installed with the `identity` extra. External providers may charge usage-based fees depending on your provider account, pricing plan, and processing volume.
+
+## Development Transparency
+
+This project was developed as an agentic coding project using [OpenCode](https://opencode.ai/) with [OpenAI](https://openai.com/) GPT-5.5. Code quality checks were supported by CodeScene's [CodeHealth](https://codescene.com/product/code-health) analysis.
+
 ## What It Does
 
 `fow process <audio>` runs the main pipeline:
