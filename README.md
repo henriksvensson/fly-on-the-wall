@@ -291,6 +291,18 @@ Publish all exported meetings:
 fow publish all --target obsidian
 ```
 
+## Example Personal Setup
+
+One practical setup is to combine several recording sources with watched folders and Obsidian publishing:
+
+- A Philips DVT 4110 voice recorder is automounted when connected, exposing recordings as a local folder.
+- A dedicated Dropbox recording folder is synced locally with [rclone](https://rclone.org/dropbox/).
+- On iPhone, [RecUp](https://apps.apple.com/us/app/recup-record-to-the-cloud/id416288287) can upload recordings directly to Dropbox. Assigning RecUp to the iPhone Action Button makes quick capture a one-button workflow.
+- `fow watch run` watches both the recorder mount and the local Dropbox/rclone folder.
+- Processed notes are published into an Obsidian vault. If the vault is already synced with [Remotely Save](https://github.com/remotely-save/remotely-save), notes can then appear on other devices through Obsidian sync tooling.
+
+In that setup, recordings can enter from either the hardware recorder or phone uploads, `fow` processes them locally, and Obsidian becomes the final reading and review surface.
+
 ## Cost Tracking
 
 The app records estimated external service usage and costs for future live provider calls.
