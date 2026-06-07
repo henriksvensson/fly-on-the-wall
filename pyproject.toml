@@ -1,5 +1,5 @@
 [project]
-name = "fly-on-the-wall"
+name = "fow-cli"
 version = "0.1.0"
 description = "Personal CLI note-taker for turning meeting audio into cleaned meeting manuscripts."
 readme = "README.md"

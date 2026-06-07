@@ -55,20 +55,20 @@ Speaker identity matching uses local embeddings via `pyannote.audio` / `pyannote
 Install the CLI with `uv tool`:
 
 ```bash
-uv tool install fly-on-the-wall
+uv tool install fow-cli
 fow setup
 ```
 
 Speaker identity matching is optional and adds heavier local ML dependencies:
 
 ```bash
-uv tool install "fly-on-the-wall[identity]"
+uv tool install "fow-cli[identity]"
 ```
 
 If you already installed the base CLI with `uv tool`, upgrade it with the optional extra:
 
 ```bash
-uv tool upgrade --reinstall "fly-on-the-wall[identity]"
+uv tool upgrade --reinstall "fow-cli[identity]"
 ```
 
 Development from a source checkout also uses `uv`:
@@ -347,7 +347,7 @@ Raw provider responses are intentionally preserved. They are useful for debuggin
 Remove the installed CLI:
 
 ```bash
-uv tool uninstall fly-on-the-wall
+uv tool uninstall fow-cli
 ```
 
 Remove local configuration and app data if you no longer need stored meetings, exports, raw provider responses, voice samples, or settings:
