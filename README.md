@@ -1,5 +1,9 @@
 # Fly on the Wall
 
+[![PyPI](https://img.shields.io/pypi/v/fow-cli.svg)](https://pypi.org/project/fow-cli/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/fow-cli.svg)](https://pypi.org/project/fow-cli/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Fly on the Wall is a personal CLI note-taker for meeting audio.
 
 It takes local audio recordings, transcribes them, identifies recurring speakers where possible, cleans the transcript, analyzes the meeting, exports durable Markdown artifacts, and can publish readable notes into an Obsidian vault.
@@ -400,7 +404,7 @@ uv build
 Test a built wheel locally:
 
 ```bash
-uv tool install dist/fly_on_the_wall-0.1.0-py3-none-any.whl
+uv tool install dist/fow_cli-0.1.0-py3-none-any.whl
 fow setup
 ```
 
