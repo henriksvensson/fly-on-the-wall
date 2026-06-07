@@ -398,7 +398,7 @@ DEFAULT_SERVICE_PRICES = (
             "litellm_fallback_key": "elevenlabs/scribe_v1",
             "inferred_for_model": "scribe_v2",
             "litellm_price_fields": {"input_cost_per_second": 0.0000611},
-            "note": ("Exact scribe_v2 entry was not present in LiteLLM; " "seeded from Scribe pricing fallback."),
+            "note": ("Exact scribe_v2 entry was not present in LiteLLM; seeded from Scribe pricing fallback."),
         },
     },
 )

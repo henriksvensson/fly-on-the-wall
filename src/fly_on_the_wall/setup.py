@@ -114,7 +114,7 @@ def _setup_speaker_identity(console: Console) -> None:
         with database() as connection:
             status = people_embedding_status(connection)
         console.print("- local speaker identity dependencies: available")
-        console.print("- voice sample embeddings: " f"{status.embedded_voice_samples}/{status.voice_samples} embedded")
+        console.print(f"- voice sample embeddings: {status.embedded_voice_samples}/{status.voice_samples} embedded")
         if status.missing_voice_sample_embeddings:
             console.print("Run `fow people embeddings backfill` to embed missing voice samples.")
         console.print("")

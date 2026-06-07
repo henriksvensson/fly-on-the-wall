@@ -593,7 +593,7 @@ def people_embeddings_backfill() -> None:
         console.print(str(exc))
         raise typer.Exit(code=1) from exc
 
-    console.print(f"People voice embedding backfill complete: {result.embedded} embedded, " f"{result.failed} failed.")
+    console.print(f"People voice embedding backfill complete: {result.embedded} embedded, {result.failed} failed.")
     if result.embedded:
         console.print("Next: fow refresh speakers")
 

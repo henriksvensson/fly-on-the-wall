@@ -81,12 +81,12 @@ def _speaker_embedding_checks() -> list[DoctorCheck]:
         DoctorCheck(
             name="voice sample embeddings",
             ok=counts["voice_samples"] == 0 or counts["embedded_voice_samples"] == counts["voice_samples"],
-            detail=(f"{counts['embedded_voice_samples']}/{counts['voice_samples']} " "voice samples embedded"),
+            detail=(f"{counts['embedded_voice_samples']}/{counts['voice_samples']} voice samples embedded"),
         ),
         DoctorCheck(
             name="local speaker embeddings",
             ok=counts["local_speakers"] == 0 or counts["embedded_local_speakers"] > 0 or pyannote_available,
-            detail=(f"{counts['embedded_local_speakers']}/{counts['local_speakers']} " "local speakers embedded"),
+            detail=(f"{counts['embedded_local_speakers']}/{counts['local_speakers']} local speakers embedded"),
         ),
     ]
 

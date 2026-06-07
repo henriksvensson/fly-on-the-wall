@@ -301,7 +301,7 @@ def _obsidian_note(meeting: dict, transcript_markdown: str, analysis_markdown: s
         lines.append(f"Device/Software: {meeting['device_or_software']}")
     if meeting.get("recording_quality_status"):
         lines.append(
-            "Recording Quality: " f"{meeting['recording_quality_status']} ({meeting['recording_quality_reason']})"
+            f"Recording Quality: {meeting['recording_quality_status']} ({meeting['recording_quality_reason']})"
         )
     lines.append(f"Internal Export: {manifest.get('id', 'unknown')}")
     lines.append("")

@@ -61,7 +61,7 @@ def suggest_meeting_title(request: TitleRequest) -> str:
     content = _post_chat_completion(
         ChatCompletionRequest(
             system_prompt=_title_system_prompt(request.meeting_context),
-            user_prompt=(f"Transcript:\n{request.transcript_markdown}\n\n" f"Analysis:\n{request.analysis_markdown}"),
+            user_prompt=(f"Transcript:\n{request.transcript_markdown}\n\nAnalysis:\n{request.analysis_markdown}"),
             options=request.options,
             timeout_seconds=60,
         )
