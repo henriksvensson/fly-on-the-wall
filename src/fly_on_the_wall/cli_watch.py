@@ -192,11 +192,12 @@ def _scan_watch_once(config, stable_age_seconds: int) -> None:
             stable_age_seconds=stable_age_seconds,
             progress=lambda message: console.print(f"-> {message}"),
         )
-    console.print(
+    message = (
         f"Watch scan complete: {result.processed} processed, "
         f"{result.ignored} ignored, {result.skipped} skipped, "
         f"{result.failed} failed, {result.seen} seen."
     )
+    console.print(message)
 
 
 def _set_watch_folder_enabled_command(identifier: str, enabled: bool) -> None:

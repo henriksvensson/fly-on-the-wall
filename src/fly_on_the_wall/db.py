@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -499,7 +499,7 @@ def bootstrap_database(database_path: Path | None = None) -> Path:
 
 
 @contextmanager
-def database(database_path: Path | None = None) -> Iterator[sqlite3.Connection]:
+def database(database_path: Path | None = None) -> Generator[sqlite3.Connection]:
     connection = connect(database_path)
     try:
         initialize_database(connection)

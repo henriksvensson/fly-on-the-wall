@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -55,25 +56,11 @@ class InteractiveMenu:
         )
 
     def _bind_navigation_keys(self) -> None:
-        @self.key_bindings.add("up")
-        def _up(_event) -> None:
-            self._move(-1)
-
-        @self.key_bindings.add("down")
-        def _down(_event) -> None:
-            self._move(1)
-
-        @self.key_bindings.add("enter")
-        def _enter(_event) -> None:
-            if self._playback_is_running():
-                self._stop_playback()
-                return
-            self._finish(self.choices[self.selected_index])
-
-        @self.key_bindings.add("escape")
-        @self.key_bindings.add("c-c")
-        def _cancel(_event) -> None:
-            self._cancel()
+        self.key_bindings.add("up")(self._handle_up)
+        self.key_bindings.add("down")(self._handle_down)
+        self.key_bindings.add("enter")(self._handle_enter)
+        self.key_bindings.add("escape")(self._handle_cancel)
+        self.key_bindings.add("c-c")(self._handle_cancel)
 
     def _bind_shortcut_keys(self) -> None:
         bound_shortcuts: set[str] = set()
@@ -81,7 +68,28 @@ class InteractiveMenu:
             if choice.shortcut is None or choice.shortcut in bound_shortcuts:
                 continue
             bound_shortcuts.add(choice.shortcut)
-            self.key_bindings.add(choice.shortcut)(lambda _event, selected=choice: self._finish(selected))
+            self.key_bindings.add(choice.shortcut)(self._shortcut_handler(choice))
+
+    def _handle_up(self, _event: object) -> None:
+        self._move(-1)
+
+    def _handle_down(self, _event: object) -> None:
+        self._move(1)
+
+    def _handle_enter(self, _event: object) -> None:
+        if self._playback_is_running():
+            self._stop_playback()
+            return
+        self._finish(self.choices[self.selected_index])
+
+    def _handle_cancel(self, _event: object) -> None:
+        self._cancel()
+
+    def _shortcut_handler(self, choice: MenuChoice) -> Callable[[object], None]:
+        def handle_shortcut(_event: object) -> None:
+            self._finish(choice)
+
+        return handle_shortcut
 
     def _finish(self, choice: MenuChoice) -> None:
         if choice.playback_path is not None:

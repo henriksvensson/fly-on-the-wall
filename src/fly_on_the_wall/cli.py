@@ -93,13 +93,15 @@ def _version_callback(show_version: bool) -> None:
 
 @app.callback()
 def main(
-    version: bool = typer.Option(
-        False,
-        "--version",
-        callback=_version_callback,
-        is_eager=True,
-        help="Show the application version.",
-    ),
+    _version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            callback=_version_callback,
+            is_eager=True,
+            help="Show the application version.",
+        ),
+    ] = False,
 ) -> None:
     """Run Fly on the Wall commands."""
 
