@@ -393,7 +393,10 @@ Run lint and formatting checks:
 ```bash
 uv run ruff check .
 uv run ruff format --check .
+uv run basedpyright
 ```
+
+`basedpyright` is configured as a pragmatic source-code guardrail. It checks explicit type claims in `src/` without requiring every dynamic SQLite, JSON, or third-party boundary to be fully typed.
 
 Build distribution artifacts:
 
