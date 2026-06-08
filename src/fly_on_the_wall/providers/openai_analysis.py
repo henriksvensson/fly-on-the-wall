@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 import httpx
 
@@ -20,7 +21,7 @@ class OpenAIRequestOptions:
     model: str = DEFAULT_ANALYSIS_MODEL
     api_key: str | None = None
     client: httpx.Client | None = None
-    usage_callback: Callable[[dict], None] | None = None
+    usage_callback: Callable[[dict[str, Any]], None] | None = None
 
 
 @dataclass(frozen=True)
@@ -98,7 +99,7 @@ def _close_client(client: httpx.Client, close_client: bool) -> None:
         client.close()
 
 
-def _send_chat_completion(client: httpx.Client, api_key: str, request: ChatCompletionRequest) -> dict:
+def _send_chat_completion(client: httpx.Client, api_key: str, request: ChatCompletionRequest) -> dict[str, Any]:
     response = client.post(
         API_URL,
         headers={"Authorization": f"Bearer {api_key}"},
@@ -115,7 +116,7 @@ def _send_chat_completion(client: httpx.Client, api_key: str, request: ChatCompl
     return response.json()
 
 
-def _record_usage(options: OpenAIRequestOptions, response_json: dict) -> None:
+def _record_usage(options: OpenAIRequestOptions, response_json: dict[str, Any]) -> None:
     if options.usage_callback is not None:
         options.usage_callback(response_json)
 
@@ -180,7 +181,7 @@ Meeting context: {context}
 """.strip()
 
 
-def _extract_content(response: dict) -> str:
+def _extract_content(response: dict[str, Any]) -> str:
     try:
         content = response["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:

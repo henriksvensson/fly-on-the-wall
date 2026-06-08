@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 import keyring
-from keyring.errors import KeyringError
+from keyring.errors import KeyringError, PasswordDeleteError
 
 from fly_on_the_wall.config import API_KEY_ENV_VARS
 
@@ -59,7 +59,7 @@ def remove_api_key(provider: str) -> None:
     normalized = _require_known_provider(provider)
     try:
         keyring.delete_password(KEYRING_SERVICE, normalized)
-    except keyring.errors.PasswordDeleteError:
+    except PasswordDeleteError:
         return
     except KeyringError as exc:
         raise SecretError(f"Could not remove {normalized} API key from OS keyring: {exc}") from exc

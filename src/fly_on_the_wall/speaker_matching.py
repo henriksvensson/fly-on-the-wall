@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from sqlite3 import Connection
+from typing import TypedDict
 from uuid import uuid4
 
 from fly_on_the_wall.config import ConfidenceThresholds
@@ -17,6 +18,12 @@ class SpeakerMatch:
     status: str
     confidence: float | None
     margin: float | None
+
+
+class SpeakerScore(TypedDict):
+    person_id: str
+    voice_sample_id: str
+    score: float
 
 
 def match_local_speakers(
@@ -75,7 +82,7 @@ def match_local_speaker(
     return SpeakerMatch(local_speaker_id, person_id, status, best["score"], margin)
 
 
-def _score_people(connection: Connection, local_vector: list[float]) -> list[dict[str, float | str]]:
+def _score_people(connection: Connection, local_vector: list[float]) -> list[SpeakerScore]:
     rows = connection.execute(
         """
         SELECT person_id, id AS voice_sample_id, embedding_path
@@ -83,7 +90,7 @@ def _score_people(connection: Connection, local_vector: list[float]) -> list[dic
         WHERE embedding_path IS NOT NULL
         """
     ).fetchall()
-    best_by_person: dict[str, dict[str, float | str]] = {}
+    best_by_person: dict[str, SpeakerScore] = {}
     for row in rows:
         score = cosine_similarity(local_vector, read_embedding(Path(row["embedding_path"])))
         current = best_by_person.get(row["person_id"])

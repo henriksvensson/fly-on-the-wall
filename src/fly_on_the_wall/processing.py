@@ -5,6 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from sqlite3 import Connection
+from typing import Any
 
 from fly_on_the_wall.cache import read_cached_text, text_sha256, write_cached_text
 from fly_on_the_wall.cleanup import deterministic_cleanup
@@ -223,12 +224,8 @@ def _cleanup_transcript(context: RefreshContext, deterministic_transcript: str) 
                 deterministic_transcript,
                 glossary_terms=glossary_terms,
                 meeting_context=context.description,
-                usage_callback=lambda response: record_openai_usage(
-                    context.connection,
-                    meeting_id=context.meeting.id,
-                    model=DEFAULT_CLEANUP_MODEL,
-                    service="cleanup",
-                    response=response,
+                usage_callback=lambda response: _record_openai_usage(
+                    context, DEFAULT_CLEANUP_MODEL, "cleanup", response
                 ),
             )
             write_cached_text(cleanup_cache_dir, cleanup_cache_key, cleaned_transcript)
@@ -278,12 +275,8 @@ def _suggest_and_apply_title(
                         analysis,
                         meeting_context=context.description,
                         options=OpenAIRequestOptions(
-                            usage_callback=lambda response: record_openai_usage(
-                                context.connection,
-                                meeting_id=context.meeting.id,
-                                model=DEFAULT_ANALYSIS_MODEL,
-                                service="title",
-                                response=response,
+                            usage_callback=lambda response: _record_openai_usage(
+                                context, DEFAULT_ANALYSIS_MODEL, "title", response
                             )
                         ),
                     ),
@@ -388,6 +381,16 @@ def _format_elapsed(seconds: float) -> str:
     return _format_duration(seconds)
 
 
+def _record_openai_usage(context: RefreshContext, model: str, service: str, response: dict[str, Any]) -> None:
+    record_openai_usage(
+        context.connection,
+        meeting_id=context.meeting.id,
+        model=model,
+        service=service,
+        response=response,
+    )
+
+
 def _analyze_transcript(
     context: RefreshContext,
     transcript: str,
@@ -409,12 +412,8 @@ def _analyze_transcript(
                     transcript,
                     meeting_context=context.description,
                     options=OpenAIRequestOptions(
-                        usage_callback=lambda response: record_openai_usage(
-                            context.connection,
-                            meeting_id=context.meeting.id,
-                            model=DEFAULT_ANALYSIS_MODEL,
-                            service="analysis",
-                            response=response,
+                        usage_callback=lambda response: _record_openai_usage(
+                            context, DEFAULT_ANALYSIS_MODEL, "analysis", response
                         )
                     ),
                 ),

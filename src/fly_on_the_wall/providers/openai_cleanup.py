@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 import httpx
 
@@ -23,7 +24,7 @@ def cleanup_transcript(
     model: str = DEFAULT_MODEL,
     api_key: str | None = None,
     client: httpx.Client | None = None,
-    usage_callback: Callable[[dict], None] | None = None,
+    usage_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> str:
     resolved_api_key = api_key or get_api_key("openai")
     if not resolved_api_key:
@@ -83,7 +84,7 @@ Glossary terms: {glossary}
 """.strip()
 
 
-def _extract_content(response: dict) -> str:
+def _extract_content(response: dict[str, Any]) -> str:
     try:
         content = response["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:

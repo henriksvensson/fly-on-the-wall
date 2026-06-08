@@ -41,6 +41,7 @@ fow = "fly_on_the_wall.cli:app"
 
 [dependency-groups]
 dev = [
+    "basedpyright>=1.39.7",
     "pre-commit>=4.0.0",
     "pytest>=8.0.0",
     "ruff>=0.8.0",
@@ -74,3 +75,7 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.basedpyright]
+include = ["src"]
+exclude = ["tests"]

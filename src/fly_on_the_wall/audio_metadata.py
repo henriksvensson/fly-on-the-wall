@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from sqlite3 import Connection
+from typing import Any, cast
 
 from fly_on_the_wall.audio import AudioError, probe_metadata
 from fly_on_the_wall.storage import StoragePaths
@@ -103,9 +104,13 @@ def extract_and_store_audio_metadata(
         )
 
 
-def normalize_audio_metadata(raw_metadata: dict, audio_path: Path) -> NormalizedAudioMetadata:
+JsonObject = dict[str, Any]
+
+
+def normalize_audio_metadata(raw_metadata: JsonObject, audio_path: Path) -> NormalizedAudioMetadata:
     audio_stream = _first_audio_stream(raw_metadata)
-    format_data = raw_metadata.get("format") if isinstance(raw_metadata.get("format"), dict) else {}
+    raw_format = raw_metadata.get("format")
+    format_data: JsonObject = cast(JsonObject, raw_format) if isinstance(raw_format, dict) else {}
     format_tags = _normalized_tags(format_data.get("tags"))
     stream_tags = _normalized_tags(audio_stream.get("tags"))
     tags = {**stream_tags, **format_tags}
@@ -133,13 +138,13 @@ def normalize_audio_metadata(raw_metadata: dict, audio_path: Path) -> Normalized
     )
 
 
-def _first_audio_stream(raw_metadata: dict) -> dict:
+def _first_audio_stream(raw_metadata: JsonObject) -> JsonObject:
     streams = raw_metadata.get("streams")
     if not isinstance(streams, list):
         return {}
     for stream in streams:
         if isinstance(stream, dict) and stream.get("codec_type") == "audio":
-            return stream
+            return cast(JsonObject, stream)
     return {}
 
 
@@ -228,14 +233,22 @@ def _optional_str(value: object) -> str | None:
 
 
 def _optional_int(value: object) -> int | None:
+    if value is None:
+        return None
     try:
-        return int(value) if value is not None else None
+        if isinstance(value, int | float | str | bytes | bytearray):
+            return int(value)
+        return int(str(value))
     except (TypeError, ValueError):
         return None
 
 
 def _optional_float(value: object) -> float | None:
+    if value is None:
+        return None
     try:
-        return float(value) if value is not None else None
+        if isinstance(value, int | float | str | bytes | bytearray):
+            return float(value)
+        return float(str(value))
     except (TypeError, ValueError):
         return None
