@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from sqlite3 import Connection
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 from uuid import uuid4
 
 from fly_on_the_wall.storage import StoragePaths, storage_paths
@@ -17,6 +18,11 @@ class EmbeddingBackend(Protocol):
     model_name: str
 
     def embed(self, audio_path: Path) -> list[float]: ...
+
+
+@runtime_checkable
+class SupportsToList(Protocol):
+    def tolist(self) -> object: ...
 
 
 @dataclass(frozen=True)
@@ -36,13 +42,28 @@ class PyannoteEmbeddingBackend:
             raise RuntimeError("pyannote.audio is required for local speaker embeddings.") from exc
 
         model = Model.from_pretrained(self.model_name)
+        if model is None:
+            raise RuntimeError(f"Could not load embedding model: {self.model_name}")
         self._inference = Inference(model, window="whole")
 
     def embed(self, audio_path: Path) -> list[float]:
-        embedding = self._inference(str(audio_path))
-        if hasattr(embedding, "tolist"):
-            return [float(value) for value in embedding.tolist()]
-        return [float(value) for value in embedding]
+        return _embedding_to_vector(self._inference(str(audio_path)))
+
+
+def _embedding_to_vector(embedding: object) -> list[float]:
+    values = embedding.tolist() if isinstance(embedding, SupportsToList) else embedding
+    if isinstance(values, str | bytes | bytearray) or not isinstance(values, Iterable):
+        raise RuntimeError("Embedding backend returned an unsupported shape.")
+    try:
+        return [_embedding_value_to_float(value) for value in values]
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("Embedding backend returned non-numeric values.") from exc
+
+
+def _embedding_value_to_float(value: object) -> float:
+    if not isinstance(value, int | float | str | bytes | bytearray):
+        raise TypeError(f"Unsupported embedding value: {type(value).__name__}")
+    return float(value)
 
 
 def cache_voice_sample_embedding(

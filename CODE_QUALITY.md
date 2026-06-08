@@ -47,10 +47,10 @@ reportAssignmentType = "error"
 reportCallIssue = "error"
 ```
 
-Consider relaxing these during the initial adoption phase if the noise blocks progress:
+Relax these during the initial adoption phase so dynamic boundaries remain allowed:
 
 ```toml
-reportMissingTypeArgument = "warning"
+reportMissingTypeArgument = "none"
 reportAny = "none"
 reportExplicitAny = "none"
 reportUnknownVariableType = "none"
@@ -61,6 +61,23 @@ reportMissingParameterType = "none"
 reportUnusedCallResult = "none"
 reportUnannotatedClassAttribute = "none"
 ```
+
+Current adoption settings:
+
+```toml
+reportAny = "none"
+reportExplicitAny = "none"
+reportUnknownVariableType = "none"
+reportUnknownMemberType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownParameterType = "none"
+reportMissingParameterType = "none"
+reportMissingTypeArgument = "none"
+reportUnusedCallResult = "none"
+reportUnannotatedClassAttribute = "none"
+```
+
+This makes `basedpyright` act as a guardrail for explicit type claims rather than a mandate to fully type every dynamic boundary. SQLite rows, JSON payloads, and weakly typed third-party APIs remain allowed until we intentionally model them.
 
 Do not suppress rules just to make output look clean. Prefer fixing high-signal findings first, especially where a function boundary can be typed with a dataclass, `TypedDict`, or explicit runtime validation.
 

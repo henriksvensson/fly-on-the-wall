@@ -14,11 +14,6 @@ GLOSSARY_FILE_NAME = "glossary.yaml"
 ProviderName = Literal["elevenlabs", "openai"]
 CleanupMode = Literal["off", "deterministic", "light"]
 
-API_KEY_ENV_VARS: dict[str, str] = {
-    "elevenlabs": "ELEVENLABS_API_KEY",
-    "openai": "OPENAI_API_KEY",
-}
-
 
 class ConfigError(RuntimeError):
     """Raised when the application config cannot be loaded."""

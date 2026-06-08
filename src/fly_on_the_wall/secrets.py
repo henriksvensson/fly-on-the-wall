@@ -7,7 +7,7 @@ from typing import Literal
 import keyring
 from keyring.errors import KeyringError, PasswordDeleteError
 
-from fly_on_the_wall.config import API_KEY_ENV_VARS
+from fly_on_the_wall.api_keys import API_KEY_ENV_VARS
 
 KEYRING_SERVICE = "fly-on-the-wall"
 SecretSource = Literal["env", "keyring", "missing", "unknown"]
