@@ -17,6 +17,7 @@ from fly_on_the_wall.watch import (
     list_watch_folders,
     remove_watch_folder,
     scan_watch_folders,
+    set_watch_folder_delete_originals_after_import,
     set_watch_folder_enabled,
 )
 
@@ -77,17 +78,26 @@ def watch_run(
 def watch_folders_add(
     path: Annotated[Path, typer.Argument(file_okay=False, dir_okay=True)],
     name: Annotated[str | None, typer.Option("--name", "-n", help="Optional folder name.")] = None,
+    delete_originals_after_import: Annotated[
+        bool,
+        typer.Option(
+            "--delete-originals-after-import",
+            help="Delete source audio files after this watch folder imports them successfully.",
+        ),
+    ] = False,
 ) -> None:
     """Add a folder to scan for audio files."""
     with database() as connection:
         try:
-            folder = add_watch_folder(connection, path, name)
+            folder = add_watch_folder(connection, path, name, delete_originals_after_import)
         except Exception as exc:
             console.print(str(exc))
             raise typer.Exit(code=1) from exc
     console.print(f"Added watch folder {folder.path}")
     if folder.name:
         console.print(f"Name: {folder.name}")
+    if folder.delete_originals_after_import:
+        console.print("Original audio files will be deleted after successful import.")
 
 
 @watch_folders_app.command("list")
@@ -102,12 +112,14 @@ def watch_folders_list() -> None:
     table.add_column("ID")
     table.add_column("Name")
     table.add_column("Enabled")
+    table.add_column("Delete Originals")
     table.add_column("Path")
     for folder in folders:
         table.add_row(
             folder.id,
             folder.name or "",
             "yes" if folder.enabled else "no",
+            "yes" if folder.delete_originals_after_import else "no",
             str(folder.path),
         )
     console.print(table)
@@ -134,6 +146,27 @@ def watch_folders_enable(identifier: str) -> None:
 def watch_folders_disable(identifier: str) -> None:
     """Disable a watched folder by id, name, or path."""
     _set_watch_folder_enabled_command(identifier, False)
+
+
+@watch_folders_app.command("delete-originals-after-import")
+def watch_folders_delete_originals_after_import(
+    identifier: str,
+    enabled: Annotated[
+        bool,
+        typer.Option(
+            "--enabled/--disabled",
+            help="Whether this folder deletes source audio files after successful import.",
+        ),
+    ],
+) -> None:
+    """Configure original audio deletion after import for a watched folder."""
+    with database() as connection:
+        folder = set_watch_folder_delete_originals_after_import(connection, identifier, enabled)
+    if folder is None:
+        console.print(f"Watch folder not found: {identifier}")
+        raise typer.Exit(code=1)
+    state = "enabled" if enabled else "disabled"
+    console.print(f"Delete originals after import {state} for {folder.path}")
 
 
 def _watch_run_once(config, stable_age_seconds: int, interval_seconds: int) -> None:

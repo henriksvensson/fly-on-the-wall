@@ -27,6 +27,7 @@ class WatchFolder:
     name: str | None
     path: Path
     enabled: bool
+    delete_originals_after_import: bool
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,7 @@ class WatchFile:
     size_bytes: int
     mtime_ns: int
     mtime: float
+    delete_original_after_import: bool
 
 
 @dataclass(frozen=True)
@@ -66,18 +68,23 @@ class WatchScanContext:
     progress: ProgressFn | None
 
 
-def add_watch_folder(connection: Connection, path: Path, name: str | None = None) -> WatchFolder:
+def add_watch_folder(
+    connection: Connection,
+    path: Path,
+    name: str | None = None,
+    delete_originals_after_import: bool = False,
+) -> WatchFolder:
     resolved_path = _resolve_folder_path(path)
     folder_id = str(uuid4())
     with connection:
         connection.execute(
             """
-            INSERT INTO watch_folders(id, name, path, enabled)
-            VALUES (?, ?, ?, 1)
+            INSERT INTO watch_folders(id, name, path, enabled, delete_originals_after_import)
+            VALUES (?, ?, ?, 1, ?)
             """,
-            (folder_id, name, str(resolved_path)),
+            (folder_id, name, str(resolved_path), 1 if delete_originals_after_import else 0),
         )
-    return WatchFolder(folder_id, name, resolved_path, True)
+    return WatchFolder(folder_id, name, resolved_path, True, delete_originals_after_import)
 
 
 def list_watch_folders(connection: Connection) -> list[WatchFolder]:
@@ -85,7 +92,7 @@ def list_watch_folders(connection: Connection) -> list[WatchFolder]:
         _watch_folder_from_row(row)
         for row in connection.execute(
             """
-            SELECT id, name, path, enabled
+            SELECT id, name, path, enabled, delete_originals_after_import
             FROM watch_folders
             ORDER BY created_at, path
             """
@@ -98,7 +105,7 @@ def get_watch_folder(connection: Connection, identifier: str) -> WatchFolder | N
     resolved_identifier_path = str(Path(identifier).expanduser().resolve())
     row = connection.execute(
         """
-        SELECT id, name, path, enabled
+        SELECT id, name, path, enabled, delete_originals_after_import
         FROM watch_folders
         WHERE id = ? OR name = ? OR path = ? OR path = ?
         """,
@@ -129,7 +136,27 @@ def set_watch_folder_enabled(connection: Connection, identifier: str, enabled: b
             """,
             (1 if enabled else 0, folder.id),
         )
-    return WatchFolder(folder.id, folder.name, folder.path, enabled)
+    return WatchFolder(folder.id, folder.name, folder.path, enabled, folder.delete_originals_after_import)
+
+
+def set_watch_folder_delete_originals_after_import(
+    connection: Connection,
+    identifier: str,
+    delete_originals_after_import: bool,
+) -> WatchFolder | None:
+    folder = get_watch_folder(connection, identifier)
+    if folder is None:
+        return None
+    with connection:
+        connection.execute(
+            """
+            UPDATE watch_folders
+            SET delete_originals_after_import = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (1 if delete_originals_after_import else 0, folder.id),
+        )
+    return WatchFolder(folder.id, folder.name, folder.path, folder.enabled, delete_originals_after_import)
 
 
 def scan_watch_folders(
@@ -152,7 +179,7 @@ def scan_watch_folders(
 
         for audio_path in _audio_files(folder.path):
             seen += 1
-            result = _scan_audio_file(context, _watch_file(folder.id, audio_path))
+            result = _scan_audio_file(context, _watch_file(folder, audio_path))
             processed += result.processed
             ignored += result.ignored
             skipped += result.skipped
@@ -171,6 +198,7 @@ def _watch_folder_from_row(row) -> WatchFolder:
         name=row["name"],
         path=Path(row["path"]),
         enabled=bool(row["enabled"]),
+        delete_originals_after_import=bool(row["delete_originals_after_import"]),
     )
 
 
@@ -187,9 +215,11 @@ def _audio_files(folder: Path) -> Iterable[Path]:
         yield path
 
 
-def _watch_file(folder_id: str, path: Path) -> WatchFile:
+def _watch_file(folder: WatchFolder, path: Path) -> WatchFile:
     stat = path.stat()
-    return WatchFile(folder_id, path, stat.st_size, stat.st_mtime_ns, stat.st_mtime)
+    return WatchFile(
+        folder.id, path, stat.st_size, stat.st_mtime_ns, stat.st_mtime, folder.delete_originals_after_import
+    )
 
 
 def _scan_audio_file(
@@ -234,7 +264,23 @@ def _process_audio_file(
         return WatchFileResult(failed=1)
 
     _mark_item_done(context.connection, item.path, result.meeting.id)
+    if item.delete_original_after_import:
+        _delete_original_audio_file(item.path, result.meeting.imported_audio_path, context.progress)
     return WatchFileResult(processed=1)
+
+
+def _delete_original_audio_file(original_path: Path, imported_audio_path: Path, progress: ProgressFn | None) -> None:
+    if original_path.resolve() == imported_audio_path.resolve():
+        _report(progress, f"Keeping original because it is the imported audio file {original_path}")
+        return
+    try:
+        original_path.unlink()
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        _report(progress, f"Could not delete original audio file {original_path}: {exc}")
+        return
+    _report(progress, f"Deleted original audio file {original_path}")
 
 
 def _upsert_seen_item(connection: Connection, item: WatchFile) -> None:

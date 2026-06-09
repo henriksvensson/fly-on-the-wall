@@ -183,7 +183,8 @@ def _print_watch_folders(console: Console, folders: list) -> None:
     console.print("Watched folders")
     for folder in folders:
         state = "enabled" if folder.enabled else "disabled"
-        console.print(f"- {folder.path} ({state})")
+        cleanup = ", deletes originals" if folder.delete_originals_after_import else ""
+        console.print(f"- {folder.path} ({state}{cleanup})")
 
 
 def _prompt_watch_folder(console: Console, connection) -> None:
@@ -191,7 +192,8 @@ def _prompt_watch_folder(console: Console, connection) -> None:
     if not path_text:
         return
     name = typer.prompt("Folder name", default="").strip() or None
-    folder = add_watch_folder(connection, Path(path_text), name)
+    delete_originals = typer.confirm("Delete original audio files after successful import?", default=False)
+    folder = add_watch_folder(connection, Path(path_text), name, delete_originals)
     console.print(f"Added watch folder: {folder.path}")
 
 

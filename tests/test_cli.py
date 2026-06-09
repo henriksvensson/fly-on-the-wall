@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from typer.testing import CliRunner
 
 import fly_on_the_wall.cli_speaker_review as cli_speaker_review
+import fly_on_the_wall.cli_watch as cli_watch
 import fly_on_the_wall.setup as setup_wizard
 from fly_on_the_wall.cli import app
 from fly_on_the_wall.doctor import DoctorCheck
@@ -403,6 +404,44 @@ def test_watch_folders_group_exists() -> None:
 
     assert result.exit_code == 0
     assert "Manage watched folders" in result.stdout
+
+
+def test_watch_folders_add_supports_delete_originals_after_import(monkeypatch, tmp_path) -> None:
+    @contextmanager
+    def fake_database():
+        yield object()
+
+    captured = {}
+
+    def fake_add_watch_folder(connection, path, name=None, delete_originals_after_import=False):
+        captured["delete_originals_after_import"] = delete_originals_after_import
+        return type(
+            "Folder",
+            (),
+            {
+                "path": path,
+                "name": name,
+                "delete_originals_after_import": delete_originals_after_import,
+            },
+        )()
+
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    monkeypatch.setattr(cli_watch, "database", fake_database)
+    monkeypatch.setattr(cli_watch, "add_watch_folder", fake_add_watch_folder)
+
+    result = runner.invoke(app, ["watch", "folders", "add", str(inbox), "--delete-originals-after-import"])
+
+    assert result.exit_code == 0
+    assert captured["delete_originals_after_import"] is True
+    assert "Original audio files will be deleted" in result.stdout
+
+
+def test_watch_folders_delete_originals_after_import_command_exists() -> None:
+    result = runner.invoke(app, ["watch", "folders", "delete-originals-after-import", "--help"])
+
+    assert result.exit_code == 0
+    assert "successful import" in result.stdout
 
 
 def test_watch_scan_command_exists() -> None:

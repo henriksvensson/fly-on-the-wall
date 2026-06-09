@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fly_on_the_wall.storage import ensure_storage_layout, storage_paths
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 SCHEMA_STATEMENTS = (
     """
@@ -218,6 +218,7 @@ SCHEMA_STATEMENTS = (
         name TEXT UNIQUE,
         path TEXT NOT NULL UNIQUE,
         enabled INTEGER NOT NULL DEFAULT 1,
+        delete_originals_after_import INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -424,6 +425,12 @@ def initialize_database(connection: sqlite3.Connection) -> None:
         _ensure_column(connection, "meetings", "title_source", "TEXT NOT NULL DEFAULT 'manual'")
         _ensure_column(connection, "meetings", "generated_title", "TEXT")
         _ensure_column(connection, "people", "is_user", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(
+            connection,
+            "watch_folders",
+            "delete_originals_after_import",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
         connection.execute(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_meetings_audio_sha256

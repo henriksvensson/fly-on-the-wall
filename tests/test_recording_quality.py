@@ -146,10 +146,11 @@ def test_watch_scan_marks_ignored_recordings(tmp_path: Path) -> None:
         raise RecordingIgnoredError(meeting, quality)
 
     with database(tmp_path / "fly.db") as connection:
-        add_watch_folder(connection, inbox)
+        add_watch_folder(connection, inbox, delete_originals_after_import=True)
         result = scan_watch_folders(connection, AppConfig(), process_fn=fake_process, stable_age_seconds=0)
         item = connection.execute("SELECT * FROM watch_items WHERE path = ?", (str(audio_path),)).fetchone()
 
     assert result.ignored == 1
     assert item["status"] == "ignored"
     assert item["error_message"] == "audio_too_short"
+    assert audio_path.exists()
