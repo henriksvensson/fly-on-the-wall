@@ -1,6 +1,6 @@
 [project]
 name = "fow-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "Personal CLI note-taker for turning meeting audio into cleaned meeting manuscripts."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -59,6 +59,7 @@ ignore-vcs = true
 only-include = [
     "src/fly_on_the_wall",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE",
     "pyproject.toml",
 ]
