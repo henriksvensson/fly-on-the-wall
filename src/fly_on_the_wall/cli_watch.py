@@ -179,7 +179,9 @@ def _watch_run_once(config, stable_age_seconds: int, interval_seconds: int) -> N
 
     changes = _watch_for_changes(existing_paths, interval_seconds)
     if changes is None:
+        console.print("Watch backend unavailable. Running safety scan before retry delay.")
         _scan_watch_once(config, stable_age_seconds)
+        sleep(interval_seconds)
         return
 
     _print_watch_changes(changes)

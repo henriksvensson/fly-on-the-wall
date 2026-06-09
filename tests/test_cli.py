@@ -506,3 +506,16 @@ def test_watch_run_command_is_event_driven() -> None:
     assert result.exit_code == 0
     assert "Watch enabled folders" in result.stdout
     assert "interval-seconds" in result.stdout
+
+
+def test_watch_run_sleeps_after_watch_backend_failure(monkeypatch, tmp_path) -> None:
+    events = []
+
+    monkeypatch.setattr(cli_watch, "_existing_watch_paths", lambda: [tmp_path])
+    monkeypatch.setattr(cli_watch, "_watch_for_changes", lambda paths, interval_seconds: None)
+    monkeypatch.setattr(cli_watch, "_scan_watch_once", lambda config, stable_age_seconds: events.append("scan"))
+    monkeypatch.setattr(cli_watch, "sleep", lambda interval_seconds: events.append(("sleep", interval_seconds)))
+
+    cli_watch._watch_run_once(object(), stable_age_seconds=5, interval_seconds=60)
+
+    assert events == ["scan", ("sleep", 60)]
