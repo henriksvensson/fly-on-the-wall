@@ -2,6 +2,15 @@
 
 All notable changes to Fly on the Wall are documented here.
 
+## [0.3.0] - 2026-06-13
+
+### Added
+
+- Added glossary management with `fow glossary` commands.
+- Added glossary and known-person hints for ElevenLabs transcription keyterms.
+- Added glossary guidance to OpenAI cleanup, analysis, and title generation.
+- Added Obsidian `participants` frontmatter links for known meeting speakers.
+
 ## [0.2.0] - 2026-06-09
 
 ### Added
