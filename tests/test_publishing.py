@@ -41,6 +41,28 @@ def test_publish_meeting_writes_and_updates_obsidian_note(tmp_path: Path) -> Non
             """,
             ("meeting-1", "intro", "Intro Call", "sv", "2026-06-02 10:09:00"),
         )
+        connection.execute(
+            """
+            INSERT INTO provider_runs(id, meeting_id, provider, model, status)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("run-1", "meeting-1", "elevenlabs", "scribe_v2", "done"),
+        )
+        connection.execute(
+            """
+            INSERT INTO local_speakers(id, meeting_id, provider_run_id, label)
+            VALUES (?, ?, ?, ?)
+            """,
+            ("speaker-1", "meeting-1", "run-1", "speaker_0"),
+        )
+        connection.execute("INSERT INTO people(id, display_name) VALUES (?, ?)", ("person-1", "Person A"))
+        connection.execute(
+            """
+            INSERT INTO speaker_assignments(id, local_speaker_id, person_id, status)
+            VALUES (?, ?, ?, ?)
+            """,
+            ("assignment-1", "speaker-1", "person-1", "known"),
+        )
         export_markdown_transcript(
             connection,
             "meeting-1",
@@ -67,6 +89,7 @@ def test_publish_meeting_writes_and_updates_obsidian_note(tmp_path: Path) -> Non
     assert second.output_path == first.output_path
     assert published_count == 1
     assert "title: Renamed Call" in note
+    assert 'participants:\n  - "[[People/Person A]]"' in note
     assert "Updated discussion." in note
     assert "## Manuscript" in note
     assert "## Transcript" not in note

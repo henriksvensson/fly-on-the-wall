@@ -133,7 +133,8 @@ def publish_meeting(connection: Connection, meeting_id_or_slug: str, target_iden
     analysis_markdown = _read_analysis_markdown(analysis_path)
     manifest = json.loads(manifest_path.read_text())
     output_path = _published_output_path(connection, meeting, target)
-    content = _obsidian_note(meeting, transcript_markdown, analysis_markdown, manifest)
+    participants = _meeting_participants(connection, meeting["id"])
+    content = _obsidian_note(meeting, transcript_markdown, analysis_markdown, manifest, participants)
     content_hash = _sha256(content)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -271,7 +272,34 @@ def _published_output_path(connection: Connection, meeting: dict, target: Publis
     return target.path / filename
 
 
-def _obsidian_note(meeting: dict, transcript_markdown: str, analysis_markdown: str, manifest: dict) -> str:
+def _meeting_participants(connection: Connection, meeting_id: str) -> list[str]:
+    rows = connection.execute(
+        """
+        SELECT DISTINCT people.display_name
+        FROM speaker_assignments
+        JOIN local_speakers ON local_speakers.id = speaker_assignments.local_speaker_id
+        JOIN people ON people.id = speaker_assignments.person_id
+        WHERE local_speakers.meeting_id = ?
+          AND speaker_assignments.status = 'known'
+        ORDER BY lower(people.display_name)
+        """,
+        (meeting_id,),
+    ).fetchall()
+    return [_obsidian_people_link(row["display_name"]) for row in rows]
+
+
+def _obsidian_people_link(display_name: str) -> str:
+    safe_name = display_name.replace("[[", "").replace("]]", "").replace("|", "-").strip()
+    return f"[[People/{safe_name}]]"
+
+
+def _obsidian_note(
+    meeting: dict,
+    transcript_markdown: str,
+    analysis_markdown: str,
+    manifest: dict,
+    participants: list[str] | None = None,
+) -> str:
     date, time = _date_time(_meeting_timestamp(meeting))
     frontmatter = {
         "title": meeting["title"],
@@ -284,6 +312,7 @@ def _obsidian_note(meeting: dict, transcript_markdown: str, analysis_markdown: s
         "recorded_at": meeting.get("recorded_at"),
         "duration_seconds": meeting.get("duration_seconds"),
         "recording_quality": meeting.get("recording_quality_status"),
+        "participants": participants or None,
         "tags": ["meetings", "fly-on-the-wall"],
     }
     lines = ["---", *_yaml_lines(frontmatter), "---", ""]
@@ -330,7 +359,7 @@ def _yaml_lines(values: dict) -> list[str]:
 
 def _yaml_scalar(value: object) -> str:
     text = str(value)
-    if re.search(r"[:#\n,]", text):
+    if re.search(r"[:#\n,\[\]{}]", text):
         return json.dumps(text, ensure_ascii=False)
     return text
 
