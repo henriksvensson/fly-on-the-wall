@@ -26,6 +26,13 @@ def test_people_group_exists() -> None:
     assert "Manage known people" in result.stdout
 
 
+def test_glossary_group_exists() -> None:
+    result = runner.invoke(app, ["glossary", "--help"])
+
+    assert result.exit_code == 0
+    assert "Manage transcription and cleanup glossary terms" in result.stdout
+
+
 def test_setup_command_exists() -> None:
     result = runner.invoke(app, ["setup", "--help"])
 

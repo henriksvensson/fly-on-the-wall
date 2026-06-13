@@ -9,6 +9,7 @@ from rich.table import Table
 
 from fly_on_the_wall import __version__
 from fly_on_the_wall.cli_costs import costs_app
+from fly_on_the_wall.cli_glossary import glossary_app
 from fly_on_the_wall.cli_publish import publish_app
 from fly_on_the_wall.cli_speaker_review import speakers_review
 from fly_on_the_wall.cli_watch import watch_app
@@ -78,6 +79,7 @@ app.add_typer(meetings_app, name="meetings")
 meetings_app.add_typer(meeting_speakers_app, name="speakers")
 app.add_typer(refresh_app, name="refresh")
 app.add_typer(secrets_app, name="secrets")
+app.add_typer(glossary_app, name="glossary")
 app.add_typer(watch_app, name="watch")
 app.add_typer(publish_app, name="publish")
 app.add_typer(costs_app, name="costs")

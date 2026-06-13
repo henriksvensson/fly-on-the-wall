@@ -13,7 +13,7 @@ from fly_on_the_wall.config import AppConfig
 from fly_on_the_wall.costs import record_openai_usage
 from fly_on_the_wall.embeddings import EmbeddingBackend
 from fly_on_the_wall.exporting import ExportResult, export_markdown_transcript
-from fly_on_the_wall.glossary import load_glossary_terms
+from fly_on_the_wall.glossary import glossary_prompt_lines, transcription_keyterms
 from fly_on_the_wall.meetings import (
     Meeting,
     get_meeting,
@@ -107,8 +107,17 @@ def process_audio(
     existing_provider_run = latest_completed_provider_run(connection, meeting.id)
     if existing_provider_run is None:
         with timed_progress.step("Transcribing audio with ElevenLabs"):
-            resolved_transcribe = transcribe_fn or _run_elevenlabs_transcription
-            provider_run_id = resolved_transcribe(connection, meeting.id, meeting.imported_audio_path, paths)
+            if transcribe_fn is not None:
+                provider_run_id = transcribe_fn(connection, meeting.id, meeting.imported_audio_path, paths)
+            else:
+                keyterms = transcription_keyterms(connection, config.glossary_path)
+                provider_run_id = _run_elevenlabs_transcription(
+                    connection,
+                    meeting.id,
+                    meeting.imported_audio_path,
+                    paths,
+                    keyterms,
+                )
     else:
         timed_progress.message("Reusing completed ElevenLabs transcription")
         provider_run_id = existing_provider_run["id"]
@@ -200,7 +209,7 @@ def _cleanup_transcript(context: RefreshContext, deterministic_transcript: str) 
     if context.config.cleanup_mode != "light" or not get_api_key("openai"):
         return TranscriptArtifacts(deterministic_transcript, deterministic_transcript)
 
-    glossary_terms = load_glossary_terms(context.config.glossary_path)
+    glossary_terms = glossary_prompt_lines(context.connection, context.config.glossary_path)
     cleanup_cache_key = text_sha256(
         "\n".join(
             [
@@ -260,7 +269,10 @@ def _suggest_and_apply_title(
     if meeting.get("title_source") == "manual":
         return
 
-    title_cache_key = text_sha256("\n".join([DEFAULT_ANALYSIS_MODEL, context.description or "", transcript, analysis]))
+    glossary_terms = glossary_prompt_lines(context.connection, context.config.glossary_path)
+    title_cache_key = text_sha256(
+        "\n".join([DEFAULT_ANALYSIS_MODEL, context.description or "", "\n".join(glossary_terms), transcript, analysis])
+    )
     title_cache_dir = context.paths.artifacts / context.meeting.id / "generated-title"
     cached_title = read_cached_text(title_cache_dir, title_cache_key)
     if cached_title is not None:
@@ -274,6 +286,7 @@ def _suggest_and_apply_title(
                         transcript,
                         analysis,
                         meeting_context=context.description,
+                        glossary_terms=glossary_terms,
                         options=OpenAIRequestOptions(
                             usage_callback=lambda response: _record_openai_usage(
                                 context, DEFAULT_ANALYSIS_MODEL, "title", response
@@ -291,9 +304,13 @@ def _suggest_and_apply_title(
 
 
 def _run_elevenlabs_transcription(
-    connection: Connection, meeting_id: str, audio_path: Path, storage: StoragePaths
+    connection: Connection,
+    meeting_id: str,
+    audio_path: Path,
+    storage: StoragePaths,
+    keyterms: list[str] | None = None,
 ) -> str:
-    return run_transcription(connection, meeting_id, audio_path, storage)
+    return run_transcription(connection, meeting_id, audio_path, storage, keyterms=keyterms)
 
 
 def _meeting_from_database(connection: Connection, meeting_id: str) -> Meeting:
@@ -398,7 +415,10 @@ def _analyze_transcript(
     if not get_api_key("openai"):
         return fallback_analysis("OPENAI_API_KEY is missing")
 
-    analysis_cache_key = text_sha256("\n".join([DEFAULT_ANALYSIS_MODEL, context.description or "", transcript]))
+    glossary_terms = glossary_prompt_lines(context.connection, context.config.glossary_path)
+    analysis_cache_key = text_sha256(
+        "\n".join([DEFAULT_ANALYSIS_MODEL, context.description or "", "\n".join(glossary_terms), transcript])
+    )
     analysis_cache_dir = context.paths.artifacts / context.meeting.id / "analysis"
     cached_analysis = read_cached_text(analysis_cache_dir, analysis_cache_key)
     if cached_analysis is not None:
@@ -411,6 +431,7 @@ def _analyze_transcript(
                 AnalysisRequest(
                     transcript,
                     meeting_context=context.description,
+                    glossary_terms=glossary_terms,
                     options=OpenAIRequestOptions(
                         usage_callback=lambda response: _record_openai_usage(
                             context, DEFAULT_ANALYSIS_MODEL, "analysis", response

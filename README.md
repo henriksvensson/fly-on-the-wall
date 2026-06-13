@@ -20,6 +20,8 @@ Issues and suggestions are welcome via GitHub Issues, but the project is provide
 
 Audio is sent to configured transcription/AI providers during processing. Optional speaker identity embeddings run locally when installed with the `identity` extra. External providers may charge usage-based fees depending on your provider account, pricing plan, and processing volume.
 
+Glossary/keyterm hints are sent to ElevenLabs when processing new recordings. ElevenLabs currently documents this as a billable add-on to speech-to-text usage.
+
 ## Development Transparency
 
 This project was developed as an agentic coding project using [OpenCode](https://opencode.ai/) with [OpenAI](https://openai.com/) GPT-5.5. Code quality checks were supported by CodeScene's [CodeHealth](https://codescene.com/product/code-health) analysis.
@@ -240,6 +242,32 @@ Backfill missing known-person voice embeddings:
 fow people embeddings status
 fow people embeddings backfill
 ```
+
+## Glossary
+
+Use the glossary for names, company names, project names, product names, acronyms, and domain-specific phrases that transcription or cleanup models may spell incorrectly.
+
+Add terms with optional context:
+
+```bash
+fow glossary add "Hejare" --description "Company name"
+fow glossary add "Datadrivna" --description "The phrase data driven in Swedish"
+fow glossary add "Ants" --description "Company name"
+fow glossary add "TT" --description "Company name, short for Theodora Tech"
+```
+
+Manage terms:
+
+```bash
+fow glossary list
+fow glossary show "Hejare"
+fow glossary update "TT" --description "Company name, short for Theodora Tech"
+fow glossary disable "Ants"
+fow glossary enable "Ants"
+fow glossary remove "Ants"
+```
+
+During processing, `fow` combines enabled glossary terms with known people names. The combined list is sent to ElevenLabs as transcription keyterms for new transcriptions, and to OpenAI cleanup, analysis, and title generation as spelling/context guidance. Corrections are model-mediated; `fow` does not do deterministic search-and-replace from the glossary.
 
 ## Watched Folders
 

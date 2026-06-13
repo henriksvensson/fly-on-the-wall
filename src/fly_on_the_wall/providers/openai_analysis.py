@@ -28,6 +28,7 @@ class OpenAIRequestOptions:
 class AnalysisRequest:
     transcript_markdown: str
     meeting_context: str | None = None
+    glossary_terms: list[str] | None = None
     options: OpenAIRequestOptions = field(default_factory=OpenAIRequestOptions)
 
 
@@ -36,6 +37,7 @@ class TitleRequest:
     transcript_markdown: str
     analysis_markdown: str
     meeting_context: str | None = None
+    glossary_terms: list[str] | None = None
     options: OpenAIRequestOptions = field(default_factory=OpenAIRequestOptions)
 
 
@@ -50,7 +52,7 @@ class ChatCompletionRequest:
 def analyze_meeting(request: AnalysisRequest) -> str:
     return _post_chat_completion(
         ChatCompletionRequest(
-            system_prompt=_system_prompt(request.meeting_context),
+            system_prompt=_system_prompt(request.meeting_context, request.glossary_terms),
             user_prompt=request.transcript_markdown,
             options=request.options,
             timeout_seconds=180,
@@ -61,7 +63,7 @@ def analyze_meeting(request: AnalysisRequest) -> str:
 def suggest_meeting_title(request: TitleRequest) -> str:
     content = _post_chat_completion(
         ChatCompletionRequest(
-            system_prompt=_title_system_prompt(request.meeting_context),
+            system_prompt=_title_system_prompt(request.meeting_context, request.glossary_terms),
             user_prompt=(f"Transcript:\n{request.transcript_markdown}\n\nAnalysis:\n{request.analysis_markdown}"),
             options=request.options,
             timeout_seconds=60,
@@ -148,8 +150,9 @@ None identified.
 """.strip()
 
 
-def _system_prompt(meeting_context: str | None) -> str:
+def _system_prompt(meeting_context: str | None, glossary_terms: list[str] | None) -> str:
     context = meeting_context or "none"
+    glossary = _format_glossary(glossary_terms)
     return f"""
 You analyze meeting transcripts for a personal note-taker.
 Return concise Markdown with exactly these headings:
@@ -163,12 +166,17 @@ Return concise Markdown with exactly these headings:
 Keep it short and prioritized. Do not invent facts.
 If a section has no useful content, write "None identified."
 For action items, use: - Owner: task. Due: date or Not mentioned.
+Use the glossary spellings when the transcript appears to refer to these names or domain terms.
+Do not insert glossary terms unless the transcript context supports them.
 Meeting context: {context}
+Known names and terms:
+{glossary}
 """.strip()
 
 
-def _title_system_prompt(meeting_context: str | None) -> str:
+def _title_system_prompt(meeting_context: str | None, glossary_terms: list[str] | None) -> str:
     context = meeting_context or "none"
+    glossary = _format_glossary(glossary_terms)
     return f"""
 You name meeting transcripts for a personal note-taker.
 Return only one title, with no Markdown, labels, quotes, or punctuation wrapper.
@@ -177,8 +185,18 @@ Prefer concrete names, projects, organizations, and topics from the transcript.
 Do not include dates unless the date is central to the meeting topic.
 Do not return generic titles like "Meeting Summary" or "Team Meeting".
 If the transcript has no meaningful content, return an empty string.
+Use the glossary spellings when the transcript appears to refer to these names or domain terms.
+Do not insert glossary terms unless the transcript context supports them.
 Meeting context: {context}
+Known names and terms:
+{glossary}
 """.strip()
+
+
+def _format_glossary(glossary_terms: list[str] | None) -> str:
+    if not glossary_terms:
+        return "- none"
+    return "\n".join(f"- {term}" for term in glossary_terms)
 
 
 def _extract_content(response: dict[str, Any]) -> str:

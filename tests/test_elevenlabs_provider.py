@@ -26,6 +26,24 @@ def test_transcribe_audio_posts_expected_request(tmp_path: Path) -> None:
     assert transcribe_audio(audio_path, api_key="test-key", client=client) == {"text": "hej"}
 
 
+def test_transcribe_audio_posts_keyterms(tmp_path: Path) -> None:
+    audio_path = tmp_path / "meeting.m4a"
+    audio_path.write_bytes(b"audio")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = request.read().decode(errors="ignore")
+        assert 'name="keyterms"' in body
+        assert "Hejare" in body
+        assert "Person A" in body
+        return httpx.Response(200, json={"text": "hej"})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    assert transcribe_audio(audio_path, api_key="test-key", client=client, keyterms=["Hejare", "Person A"]) == {
+        "text": "hej"
+    }
+
+
 def test_transcribe_audio_requires_api_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     audio_path = tmp_path / "meeting.m4a"
     audio_path.write_bytes(b"audio")
@@ -51,12 +69,21 @@ def test_run_transcription_stores_raw_response_and_provider_run(tmp_path: Path) 
             "INSERT INTO meetings(id, slug, title, language) VALUES (?, ?, ?, ?)",
             ("meeting-1", "meeting-1", "Meeting", "sv"),
         )
-        provider_run_id = run_transcription(connection, "meeting-1", audio_path, storage, client, api_key="test-key")
+        provider_run_id = run_transcription(
+            connection,
+            "meeting-1",
+            audio_path,
+            storage,
+            client,
+            api_key="test-key",
+            keyterms=["Hejare"],
+        )
         row = connection.execute("SELECT * FROM provider_runs WHERE id = ?", (provider_run_id,)).fetchone()
         usage = connection.execute("SELECT * FROM service_usage").fetchone()
 
     assert row["provider"] == "elevenlabs"
     assert row["model"] == "scribe_v2"
+    assert row["settings_json"] == '{"keyterms": ["Hejare"]}'
     assert row["status"] == "done"
     assert Path(row["raw_response_path"]).read_text().strip() == (
         '{\n  "text": "hej",\n  "audio_duration_secs": 10.0\n}'

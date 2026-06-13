@@ -10,7 +10,7 @@ from fly_on_the_wall.secrets import get_api_key
 API_URL = "https://api.openai.com/v1/chat/completions"
 DEFAULT_MODEL = "gpt-5.4-mini"
 DEFAULT_CLEANUP_TIMEOUT_SECONDS = 1800
-CLEANUP_PROMPT_VERSION = "2026-06-04-manuscript-cleanup-v4"
+CLEANUP_PROMPT_VERSION = "2026-06-13-manuscript-cleanup-glossary-v5"
 
 
 class OpenAICleanupError(RuntimeError):
@@ -61,7 +61,7 @@ def cleanup_transcript(
 
 
 def _system_prompt(glossary_terms: list[str] | None, meeting_context: str | None) -> str:
-    glossary = ", ".join(glossary_terms or []) or "none"
+    glossary = _format_glossary(glossary_terms)
     context = meeting_context or "none"
     return f"""
 You clean meeting transcripts into readable manuscript-style dialogue.
@@ -78,10 +78,19 @@ of an idiom, or used with clear literal/comparative meaning, such as "på samma 
 Prefer complete readable sentences over literal STT fragments, but do not summarize,
 invent details, remove uncertainty markers, or add new content.
 Preserve standalone acknowledgements such as yes/no/okay/mm and Swedish ja/nej/okej/mm.
+Use the glossary spellings when the transcript appears to refer to these names or domain terms.
+Do not insert glossary terms unless the transcript context supports them.
 Return only the cleaned manuscript.
 Meeting context: {context}
-Glossary terms: {glossary}
+Known names and terms:
+{glossary}
 """.strip()
+
+
+def _format_glossary(glossary_terms: list[str] | None) -> str:
+    if not glossary_terms:
+        return "- none"
+    return "\n".join(f"- {term}" for term in glossary_terms)
 
 
 def _extract_content(response: dict[str, Any]) -> str:

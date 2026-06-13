@@ -28,6 +28,7 @@ def transcribe_audio(
     num_speakers: int | None = None,
     diarization_threshold: float | None = None,
     no_verbatim: bool = False,
+    keyterms: list[str] | None = None,
 ) -> dict[str, Any]:
     resolved_api_key = api_key or get_api_key(PROVIDER)
     if not resolved_api_key:
@@ -46,6 +47,8 @@ def transcribe_audio(
         data["num_speakers"] = str(num_speakers)
     if diarization_threshold is not None:
         data["diarization_threshold"] = str(diarization_threshold)
+    if keyterms:
+        data["keyterms"] = json.dumps(keyterms, ensure_ascii=False)
 
     close_client = client is None
     http_client = client or httpx.Client(timeout=600)
@@ -76,15 +79,17 @@ def run_transcription(
     storage: StoragePaths | None = None,
     client: httpx.Client | None = None,
     api_key: str | None = None,
+    keyterms: list[str] | None = None,
 ) -> str:
     paths = storage or storage_paths()
     provider_run_id = str(uuid4())
     raw_response_path = paths.artifacts / meeting_id / "provider-runs" / f"{provider_run_id}.raw.json"
     raw_response_path.parent.mkdir(parents=True, exist_ok=True)
 
-    _insert_provider_run(connection, provider_run_id, meeting_id, raw_response_path, "running")
+    settings = {"keyterms": keyterms or []}
+    _insert_provider_run(connection, provider_run_id, meeting_id, raw_response_path, "running", settings)
     try:
-        response = transcribe_audio(audio_path, api_key=api_key, client=client)
+        response = transcribe_audio(audio_path, api_key=api_key, client=client, keyterms=keyterms)
         raw_response_path.write_text(json.dumps(response, indent=2, ensure_ascii=False) + "\n")
         duration = float(response.get("audio_duration_secs") or 0)
         record_service_usage(
@@ -112,6 +117,7 @@ def _insert_provider_run(
     meeting_id: str,
     raw_response_path: Path,
     status: str,
+    settings: dict[str, Any] | None = None,
 ) -> None:
     with connection:
         connection.execute(
@@ -121,11 +127,20 @@ def _insert_provider_run(
                 meeting_id,
                 provider,
                 model,
+                settings_json,
                 raw_response_path,
                 status
-            ) VALUES (?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (provider_run_id, meeting_id, PROVIDER, MODEL, str(raw_response_path), status),
+            (
+                provider_run_id,
+                meeting_id,
+                PROVIDER,
+                MODEL,
+                json.dumps(settings or {}, sort_keys=True),
+                str(raw_response_path),
+                status,
+            ),
         )
 
 
