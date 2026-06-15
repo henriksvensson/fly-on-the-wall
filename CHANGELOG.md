@@ -2,6 +2,12 @@
 
 All notable changes to Fly on the Wall are documented here.
 
+## [0.3.1] - 2026-06-15
+
+### Fixed
+
+- Fixed ElevenLabs keyterms encoding for glossary and known-person transcription hints.
+
 ## [0.3.0] - 2026-06-13
 
 ### Added

@@ -1,6 +1,6 @@
 [project]
 name = "fow-cli"
-version = "0.3.0"
+version = "0.3.1"
 description = "Personal CLI note-taker for turning meeting audio into cleaned meeting manuscripts."
 readme = "README.md"
 requires-python = ">=3.12"
