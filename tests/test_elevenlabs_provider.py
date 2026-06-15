@@ -32,9 +32,10 @@ def test_transcribe_audio_posts_keyterms(tmp_path: Path) -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         body = request.read().decode(errors="ignore")
-        assert 'name="keyterms"' in body
+        assert body.count('name="keyterms"') == 2
         assert "Hejare" in body
         assert "Person A" in body
+        assert '["Hejare", "Person A"]' not in body
         return httpx.Response(200, json={"text": "hej"})
 
     client = httpx.Client(transport=httpx.MockTransport(handler))

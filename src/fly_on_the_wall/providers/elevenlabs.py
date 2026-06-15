@@ -34,31 +34,32 @@ def transcribe_audio(
     if not resolved_api_key:
         raise ElevenLabsError("Missing ELEVENLABS_API_KEY.")
 
-    data = {
-        "model_id": MODEL,
-        "tag_audio_events": "true",
-        "timestamps_granularity": "word",
-        "diarize": "true",
-        "temperature": "0",
-        "seed": "1",
-        "no_verbatim": str(no_verbatim).lower(),
-    }
+    form_fields = [
+        ("model_id", MODEL),
+        ("tag_audio_events", "true"),
+        ("timestamps_granularity", "word"),
+        ("diarize", "true"),
+        ("temperature", "0"),
+        ("seed", "1"),
+        ("no_verbatim", str(no_verbatim).lower()),
+    ]
     if num_speakers is not None:
-        data["num_speakers"] = str(num_speakers)
+        form_fields.append(("num_speakers", str(num_speakers)))
     if diarization_threshold is not None:
-        data["diarization_threshold"] = str(diarization_threshold)
+        form_fields.append(("diarization_threshold", str(diarization_threshold)))
     if keyterms:
-        data["keyterms"] = json.dumps(keyterms, ensure_ascii=False)
+        form_fields.extend(("keyterms", keyterm) for keyterm in keyterms)
 
     close_client = client is None
     http_client = client or httpx.Client(timeout=600)
     try:
         with audio_path.open("rb") as audio_file:
+            files: list[tuple[str, Any]] = [(name, (None, value)) for name, value in form_fields]
+            files.append(("file", (audio_path.name, audio_file)))
             response = http_client.post(
                 API_URL,
                 headers={"xi-api-key": resolved_api_key},
-                data=data,
-                files={"file": (audio_path.name, audio_file)},
+                files=files,
             )
         response.raise_for_status()
         return response.json()
