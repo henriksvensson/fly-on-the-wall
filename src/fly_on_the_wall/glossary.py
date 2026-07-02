@@ -31,7 +31,10 @@ def create_glossary_term(connection: Connection, term: str, description: str | N
             """,
             (term_id, normalized, normalized_description),
         )
-    return get_glossary_term(connection, normalized)  # type: ignore[return-value]
+    created = get_glossary_term(connection, normalized)
+    if created is None:
+        raise RuntimeError(f"Created glossary term was not found: {normalized}")
+    return created
 
 
 def get_glossary_term(connection: Connection, term_or_id: str) -> GlossaryTerm | None:
@@ -80,7 +83,10 @@ def update_glossary_term(
             """,
             (updated_term, updated_description, int(updated_enabled), existing.id),
         )
-    return get_glossary_term(connection, existing.id)  # type: ignore[return-value]
+    updated = get_glossary_term(connection, existing.id)
+    if updated is None:
+        raise RuntimeError(f"Updated glossary term was not found: {existing.id}")
+    return updated
 
 
 def remove_glossary_term(connection: Connection, term_or_id: str) -> bool:

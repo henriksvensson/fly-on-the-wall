@@ -299,6 +299,36 @@ fow watch run
 
 The watcher tolerates missing/remounted folders and uses periodic scans because cloud/removable mounts may not emit reliable filesystem events.
 
+### Background Service
+
+On Linux with systemd user services, install the watcher as a background service:
+
+```bash
+fow service install
+```
+
+This writes `fow-watch.service` under the user systemd config directory, creates a non-overwriting placeholder `service.env` next to the app config, and reloads the user systemd manager. By default those paths are `~/.config/systemd/user/fow-watch.service` and `~/.config/fly-on-the-wall/service.env`; if `XDG_CONFIG_HOME` is set, the service installer uses that config root instead. It does not enable or start the service by default.
+
+Enable it for future user sessions and start it now:
+
+```bash
+fow service install --enable --start
+```
+
+Starting from install refuses to run if no enabled watch folders are configured, because `fow watch run` would exit immediately. Add a folder first with `fow watch folders add <path>`, or pass `--force-start` if you intentionally want to start anyway.
+
+Useful service commands:
+
+```bash
+fow service status
+fow service logs
+fow service restart
+fow service stop
+fow service uninstall
+```
+
+Optional service environment variables can be placed in the generated `service.env` file. The file is created as a commented placeholder during service install and is not overwritten by later installs.
+
 ## Publishing To Obsidian
 
 Publishing is separate from internal exports.
@@ -414,6 +444,14 @@ Run tests:
 
 ```bash
 uv run pytest
+```
+
+When developing a checkout while the background service is installed, stop the service first so it does not process files with the installed command:
+
+```bash
+fow service stop
+uv run fow
+fow service start
 ```
 
 Run lint and formatting checks:
