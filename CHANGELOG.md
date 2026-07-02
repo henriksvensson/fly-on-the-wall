@@ -2,6 +2,17 @@
 
 All notable changes to Fly on the Wall are documented here.
 
+## [0.4.0] - 2026-07-02
+
+### Added
+
+- Added `fow service` commands for installing and managing the Linux systemd user watch service.
+- Added a generated `service.env` placeholder for background service environment variables.
+
+### Changed
+
+- Made the Linux service install paths respect `XDG_CONFIG_HOME`.
+
 ## [0.3.1] - 2026-06-15
 
 ### Fixed
