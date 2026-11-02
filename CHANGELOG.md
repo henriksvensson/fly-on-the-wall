@@ -2,7 +2,7 @@
 
 All notable changes to Fly on the Wall are documented here.
 
-## [Unreleased]
+## [0.5.0] - 2026-11-02
 
 ### Changed
 
