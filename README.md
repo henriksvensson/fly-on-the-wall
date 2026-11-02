@@ -335,6 +335,10 @@ Publishing is separate from internal exports.
 
 Internal exports are immutable. Obsidian notes are mutable and idempotent, so republishing updates the existing note rather than creating duplicate notes.
 
+Published filenames use `YYYY-MM-DD HH-mm-ss Meeting Title.md`, with zero-padded 24-hour time for chronological sorting. The timestamp comes from the recording metadata when its confidence is high or medium; otherwise it uses the meeting's creation time. Unsafe filename characters are replaced with hyphens. If a filename is already occupied by another meeting or an unrelated file, a numeric suffix such as ` (2)` is added instead of overwriting it.
+
+Republishing follows title and timestamp changes, including upgrading older date-only filenames. The previously tracked file is removed only after the replacement has been written and tracked successfully, and is kept if another publication still references it. Published notes are managed output: manual edits may be overwritten or removed, and links to an old filename are not automatically updated.
+
 Add an Obsidian target:
 
 ```bash

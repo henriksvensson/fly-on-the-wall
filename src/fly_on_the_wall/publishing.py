@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from sqlite3 import Connection
 from uuid import uuid4
@@ -132,14 +133,21 @@ def publish_meeting(connection: Connection, meeting_id_or_slug: str, target_iden
     transcript_markdown = transcript_path.read_text()
     analysis_markdown = _read_analysis_markdown(analysis_path)
     manifest = json.loads(manifest_path.read_text())
-    output_path = _published_output_path(connection, meeting, target)
+    previous_path = _previous_published_output_path(connection, meeting["id"], target.id)
+    output_path = _published_output_path(connection, meeting, target, previous_path)
     participants = _meeting_participants(connection, meeting["id"])
     content = _obsidian_note(meeting, transcript_markdown, analysis_markdown, manifest, participants)
     content_hash = _sha256(content)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(content)
+    # Only overwrite this meeting's tracked note; never clobber a newly occupied path.
+    mode = "w" if output_path == previous_path else "x"
+    with output_path.open(mode) as note:
+        note.write(content)
     _upsert_published_item(connection, meeting["id"], target.id, output_path, content_hash)
+    if previous_path is not None and previous_path != output_path:
+        if previous_path not in _other_published_paths(connection, meeting["id"], target.id):
+            previous_path.unlink(missing_ok=True)
     return PublishResult(target, output_path, content_hash)
 
 
@@ -256,20 +264,43 @@ def _read_analysis_markdown(analysis_path: Path | None) -> str:
     return "# Meeting Analysis\n\n## Summary\n\nNo analysis export found for this snapshot."
 
 
-def _published_output_path(connection: Connection, meeting: dict, target: PublishTarget) -> Path:
+def _previous_published_output_path(connection: Connection, meeting_id: str, target_id: str) -> Path | None:
     row = connection.execute(
         """
         SELECT output_path FROM published_items
         WHERE meeting_id = ? AND target_id = ?
         """,
-        (meeting["id"], target.id),
+        (meeting_id, target_id),
     ).fetchone()
-    if row is not None:
-        return Path(row["output_path"])
+    return Path(row["output_path"]) if row is not None else None
 
-    date = _meeting_date(meeting)
-    filename = _safe_filename(f"{date} {meeting['title']}.md")
-    return target.path / filename
+
+def _other_published_paths(connection: Connection, meeting_id: str, target_id: str) -> set[Path]:
+    rows = connection.execute(
+        """
+        SELECT output_path FROM published_items
+        WHERE NOT (meeting_id = ? AND target_id = ?)
+        """,
+        (meeting_id, target_id),
+    ).fetchall()
+    return {Path(row["output_path"]) for row in rows}
+
+
+def _published_output_path(
+    connection: Connection, meeting: dict, target: PublishTarget, previous_path: Path | None
+) -> Path:
+    date, time = _date_time(_meeting_timestamp(meeting))
+    date = date if date != "Unknown" else "undated"
+    time = time.replace(":", "-") if time != "Unknown" else "unknown-time"
+    filename = _safe_filename(f"{date} {time} {meeting['title']}.md")
+    base_path = target.path / filename
+    other_paths = _other_published_paths(connection, meeting["id"], target.id)
+    candidate = base_path
+    suffix = 2
+    while candidate in other_paths or candidate.is_symlink() or (candidate != previous_path and candidate.exists()):
+        candidate = base_path.with_stem(f"{base_path.stem} ({suffix})")
+        suffix += 1
+    return candidate
 
 
 def _meeting_participants(connection: Connection, meeting_id: str) -> list[str]:
@@ -388,16 +419,14 @@ def _meeting_timestamp(meeting: dict) -> str | None:
     return meeting.get("created_at")
 
 
-def _meeting_date(meeting: dict) -> str:
-    date, _ = _date_time(_meeting_timestamp(meeting))
-    return date if date != "Unknown" else "undated"
-
-
 def _date_time(value: str | None) -> tuple[str, str]:
     if not value:
         return "Unknown", "Unknown"
-    date, _, time = value.partition(" ")
-    return date or "Unknown", time or "Unknown"
+    try:
+        timestamp = datetime.fromisoformat(value)
+    except ValueError:
+        return "Unknown", "Unknown"
+    return timestamp.strftime("%Y-%m-%d"), timestamp.strftime("%H:%M:%S")
 
 
 def _format_duration(seconds: float) -> str:

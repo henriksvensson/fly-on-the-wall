@@ -2,6 +2,16 @@
 
 All notable changes to Fly on the Wall are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- Obsidian filenames now include 24-hour recording time for chronological sorting and follow title or timestamp changes on republish, removing the old tracked file after the replacement is saved.
+
+### Fixed
+
+- Avoid overwriting other meetings or unrelated files when Obsidian filenames collide.
+
 ## [0.4.0] - 2026-07-02
 
 ### Added

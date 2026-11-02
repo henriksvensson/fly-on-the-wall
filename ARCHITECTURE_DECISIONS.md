@@ -337,7 +337,8 @@ Analysis output sections:
 - Generated manuscript Markdown is output, not editable source of truth.
 - Track export timestamp, input artifact references, and hashes where practical.
 - External publishing is mutable and idempotent.
-- Obsidian publishing stores the published path so title changes do not create duplicate notes.
+- Obsidian filenames use `YYYY-MM-DD HH-mm-ss Title.md` with 24-hour time and numeric suffixes for collisions.
+- Obsidian publishing tracks the published path so republishing can replace old filenames after title or timestamp changes without leaving duplicate notes. Old files are removed after the replacement is written and tracked, unless another publication still references the old path.
 
 ## Watched Folders
 
